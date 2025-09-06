@@ -2,7 +2,8 @@ import json
 from typing import Any, List, Dict, Tuple, Optional
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from .test_api import NeteaseMusicAPITester
 
 from app.core.event import eventmanager, Event
 from app.log import logger
@@ -32,9 +33,9 @@ class NeteaseMusic(_PluginBase):
 
     # 私有属性
     _enabled = False
-    _base_url = "http://localhost:5100"
-    _search_limit = 10
-    _default_quality = "exhigh"
+    _base_url = None
+    _search_limit = None
+    _default_quality = None
     _sessions = {}  # 用户会话状态存储
 
     def init_plugin(self, config: dict = None):
@@ -42,10 +43,16 @@ class NeteaseMusic(_PluginBase):
         初始化插件
         """
         if config:
-            self._enabled = config.get("enabled")
-            self._base_url = config.get("base_url", "http://localhost:5100")
-            self._search_limit = config.get("search_limit", 10)
-            self._default_quality = config.get("default_quality", "exhigh")
+            self._enabled = config.get("enabled", False)
+            self._base_url = config.get("base_url", None)
+            self._search_limit = config.get("search_limit", None)
+            self._default_quality = config.get("default_quality", None)
+        else:
+            # 如果没有配置，使用默认值
+            self._enabled = False
+            self._base_url = None
+            self._search_limit = None
+            self._default_quality = None
             
         # 初始化API测试器
         self._api_tester = NeteaseMusicAPITester(base_url=self._base_url)
@@ -59,10 +66,19 @@ class NeteaseMusic(_PluginBase):
         """
         return self._enabled
 
-    @staticmethod
-    def get_command() -> List[Dict[str, Any]]:
+    def set_enabled(self, enabled: bool):
         """
-        定义远程控制命令
+        设置插件启用状态
+        
+        Args:
+            enabled: 是否启用插件
+        """
+        self._enabled = enabled
+        # 可以在这里添加其他启用/禁用时需要处理的逻辑
+        
+    def stop_service(self):
+        """
+        退出插件
         """
         pass
 
@@ -76,6 +92,10 @@ class NeteaseMusic(_PluginBase):
         """
         拼装插件配置页面，需要返回两块数据：1、页面配置；2、数据结构
         """
+        # 动态生成表单，使用当前配置值作为默认值
+        base_url_placeholder = self._base_url
+        search_limit_placeholder = str(self._search_limit or 10)
+        
         return [
             {
                 'component': 'VForm',
@@ -116,7 +136,7 @@ class NeteaseMusic(_PluginBase):
                                         'props': {
                                             'model': 'base_url',
                                             'label': 'API基础URL',
-                                            'placeholder': 'http://localhost:5100'
+                                            'placeholder': base_url_placeholder
                                         }
                                     }
                                 ]
@@ -133,7 +153,7 @@ class NeteaseMusic(_PluginBase):
                                         'props': {
                                             'model': 'search_limit',
                                             'label': '默认搜索数量',
-                                            'placeholder': '10'
+                                            'placeholder': search_limit_placeholder
                                         }
                                     }
                                 ]
@@ -195,9 +215,9 @@ class NeteaseMusic(_PluginBase):
             }
         ], {
             "enabled": False,
-            "base_url": "http://localhost:5100",
-            "search_limit": 10,
-            "default_quality": "exhigh"
+            "base_url": None,
+            "search_limit": None,
+            "default_quality": None
         }
 
     def get_page(self) -> List[dict]:
@@ -290,7 +310,7 @@ class NeteaseMusic(_PluginBase):
         }
         
         # 搜索歌曲
-        search_limit = self._search_limit
+        search_limit = self._search_limit or 10
         search_result = self._api_tester.search_music(text, limit=search_limit)
         
         if not search_result.get("success"):
