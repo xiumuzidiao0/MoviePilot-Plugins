@@ -3,7 +3,6 @@ from typing import Any, List, Dict, Tuple, Optional
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from music_api import NeteaseMusicAPITester
 
 from app.core.event import eventmanager, Event
 from app.log import logger
