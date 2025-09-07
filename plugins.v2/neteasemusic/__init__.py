@@ -742,3 +742,12 @@ class NeteaseMusic(_PluginBase):
             ]
         }
         return component, {}, 'row span-4'
+
+    def get_state(self) -> bool:
+        """
+        获取插件状态
+        
+        Returns:
+            bool: 插件启用状态
+        """
+        return self._enabled
