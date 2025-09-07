@@ -3,11 +3,12 @@
     "name": "网易云音乐下载",
     "description": "通过消息交互下载网易云音乐歌曲",
     "version": "1.01",
-    "icon": "163music_A.png",
+    "icon": "mdi-music-note",
     "author": "xiumuzidiao0",
     "level": 1,
     "history": {
-      "v1.0": "test",
-      "v1.01": "Bug"
+      "v1.0": "初始版本",
+      "v1.01": "修复Bug"
+    }
   }
 }
