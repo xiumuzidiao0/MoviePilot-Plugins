@@ -3,7 +3,7 @@
     "name": "网易云音乐下载",
     "description": "通过消息交互下载网易云音乐歌曲",
     "version": "1.07",
-    "icon": "mdi-music-note",
+    "icon": "https://github.com/xiumuzidiao0/MoviePilot-Plugins/blob/main/icons/163music_A.png",
     "author": "xiumuzidiao0",
     "level": 1,
     "history": {
