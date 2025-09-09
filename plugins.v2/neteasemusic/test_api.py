@@ -19,7 +19,7 @@ from typing import Dict, Any, Optional
 class NeteaseMusicAPITester:
     """网易云音乐API测试类"""
     
-    def __init__(self, base_url: str = "http://localhost:5100"):
+    def __init__(self, base_url: str = "http://localhost:5000"):
         """
         初始化测试器
         
