@@ -20,7 +20,7 @@ class NeteaseMusic(_PluginBase):
     # 插件图标
     plugin_icon = ""
     # 插件版本
-    plugin_version = "1.07"
+    plugin_version = "1.08"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
