@@ -14,13 +14,13 @@ from app.schemas.types import EventType, MessageChannel
 
 class NeteaseMusic(_PluginBase):
     # 插件名称
-    plugin_name = "网易云音乐下载"
+    plugin_name = "音乐下载"
     # 插件描述
-    plugin_desc = "通过命令直接搜索并下载网易云音乐歌曲"
+    plugin_desc = "通过命令直接搜索并下载歌曲"
     # 插件图标
     plugin_icon = ""
     # 插件版本
-    plugin_version = "1.09"
+    plugin_version = "1.10"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
@@ -49,7 +49,7 @@ class NeteaseMusic(_PluginBase):
         """
         初始化插件
         """
-        logger.info("开始初始化网易云音乐插件")
+        logger.info("开始初始化音乐插件")
         
         if config:
             self._enabled = config.get("enabled", False)
@@ -338,12 +338,12 @@ class NeteaseMusic(_PluginBase):
         command_args = event_data.get("arg_str", "").strip()
         if not command_args:
             # 如果没有参数，提示用户输入
-            logger.info(f"用户 {userid} 触发网易云音乐下载命令，但未提供参数")
+            logger.info(f"用户 {userid} 触发音乐下载命令，但未提供参数")
             try:
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐下载",
+                    title="🎵 音乐下载",
                     text="请输入要搜索的歌曲名称或歌手，例如：/y 周杰伦",
                     userid=userid
                 )
@@ -393,7 +393,7 @@ class NeteaseMusic(_PluginBase):
             self.post_message(
                 channel=channel,
                 source=source,
-                title="🎵 网易云音乐搜索结果",
+                title="🎵 音乐搜索结果",
                 text=response,
                 userid=userid
             )
@@ -404,7 +404,7 @@ class NeteaseMusic(_PluginBase):
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐下载",
+                    title="🎵 音乐下载",
                     text="❌ 搜索时发生错误，请稍后重试",
                     userid=userid
                 )
@@ -468,12 +468,12 @@ class NeteaseMusic(_PluginBase):
         command_args = event_data.get("arg_str", "").strip()
         if not command_args:
             # 如果没有参数，提示用户输入
-            logger.info(f"用户 {userid} 触发网易云音乐选择命令，但未提供参数")
+            logger.info(f"用户 {userid} 触发音乐选择命令，但未提供参数")
             try:
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐歌曲选择",
+                    title="🎵 歌曲选择",
                     text="请输入要选择的歌曲序号，例如：/n 1",
                     userid=userid
                 )
@@ -492,7 +492,7 @@ class NeteaseMusic(_PluginBase):
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐歌曲选择",
+                    title="🎵 歌曲选择",
                     text="请先使用 /y 命令搜索歌曲，然后使用 /n 数字 来选择歌曲下载",
                     userid=userid
                 )
@@ -511,7 +511,7 @@ class NeteaseMusic(_PluginBase):
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐歌曲选择",
+                    title="🎵 歌曲选择",
                     text="搜索结果已过期，请重新使用 /y 命令搜索歌曲",
                     userid=userid
                 )
@@ -543,7 +543,7 @@ class NeteaseMusic(_PluginBase):
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐歌曲选择",
+                    title="🎵 歌曲选择",
                     text="会话状态异常，请重新使用 /y 命令搜索歌曲",
                     userid=userid
                 )
@@ -567,7 +567,7 @@ class NeteaseMusic(_PluginBase):
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐搜索结果",
+                    title="🎵 音乐搜索结果",
                     text=response,
                     userid=userid
                 )
@@ -577,7 +577,7 @@ class NeteaseMusic(_PluginBase):
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐歌曲选择",
+                    title="🎵 歌曲选择",
                     text=response,
                     userid=userid
                 )
@@ -593,7 +593,7 @@ class NeteaseMusic(_PluginBase):
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐搜索结果",
+                    title="🎵 音乐搜索结果",
                     text=response,
                     userid=userid
                 )
@@ -603,7 +603,7 @@ class NeteaseMusic(_PluginBase):
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐歌曲选择",
+                    title="🎵 歌曲选择",
                     text=response,
                     userid=userid
                 )
@@ -647,7 +647,7 @@ class NeteaseMusic(_PluginBase):
                 self.post_message(
                     channel=channel,
                     source=source,
-                    title="🎵 网易云音乐歌曲选择",
+                    title="🎵 歌曲选择",
                     text=response,
                     userid=userid
                 )
@@ -657,7 +657,7 @@ class NeteaseMusic(_PluginBase):
             self.post_message(
                 channel=channel,
                     source=source,
-                    title="🎵 网易云音乐歌曲选择",
+                    title="🎵 歌曲选择",
                     text=response,
                     userid=userid
             )
@@ -793,7 +793,7 @@ class NeteaseMusic(_PluginBase):
             self.post_message(
                 channel=channel,
                 source=source,
-                title="🎵 网易云音乐下载",
+                title="🎵 音乐下载",
                 text="❌ 下载失败: 网络异常，请稍后重试",
                 userid=userid
             )
@@ -811,7 +811,7 @@ class NeteaseMusic(_PluginBase):
         self.post_message(
             channel=channel,
             source=source,
-            title="🎵 网易云音乐下载完成",
+            title="🎵 音乐下载完成",
             text=response,
             userid=userid
         )
@@ -892,7 +892,7 @@ class NeteaseMusic(_PluginBase):
         """
         退出插件
         """
-        logger.info("正在停止网易云音乐插件服务")
+        logger.info("正在停止音乐插件服务")
         # 清理会话数据
         self._sessions.clear()
         logger.info("插件服务已停止，会话数据已清理")
@@ -952,7 +952,7 @@ class NeteaseMusic(_PluginBase):
                                                 'content': [
                                                     {
                                                         'component': 'span',
-                                                        'text': '网易云音乐下载插件'
+                                                        'text': '音乐下载插件'
                                                     }
                                                 ]
                                             },
@@ -961,7 +961,7 @@ class NeteaseMusic(_PluginBase):
                                                 'content': [
                                                     {
                                                         'component': 'p',
-                                                        'text': '通过命令直接搜索并下载网易云音乐歌曲'
+                                                        'text': '通过命令直接搜索并下载歌曲'
                                                     },
                                                     {
                                                         'component': 'h3',
@@ -997,7 +997,7 @@ class NeteaseMusic(_PluginBase):
                                                         'content': [
                                                             {
                                                                 'component': 'li',
-                                                                'text': 'API基础URL：网易云音乐API服务的基础URL，默认为http://localhost:5000'
+                                                                'text': 'API基础URL：音乐API服务的基础URL，默认为http://localhost:5000'
                                                             },
                                                             {
                                                                 'component': 'li',
@@ -1122,7 +1122,7 @@ class NeteaseMusic(_PluginBase):
                                             'props': {
                                                 'class': 'text-h6'
                                             },
-                                            'text': '网易云音乐下载'
+                                            'text': '音乐下载'
                                         },
                                         {
                                             'component': 'div',
@@ -1162,7 +1162,7 @@ class NeteaseMusic(_PluginBase):
             {
                 "cmd": "/y",
                 "event": EventType.PluginAction,
-                "desc": "网易云音乐下载",
+                "desc": "音乐下载",
                 "category": "媒体搜索",
                 "data": {
                     "action": "netease_music_download"
@@ -1171,7 +1171,7 @@ class NeteaseMusic(_PluginBase):
             {
                 "cmd": "/n",
                 "event": EventType.PluginAction,
-                "desc": "网易云音乐歌曲选择",
+                "desc": "歌曲选择",
                 "category": "媒体搜索",
                 "data": {
                     "action": "netease_music_select"
