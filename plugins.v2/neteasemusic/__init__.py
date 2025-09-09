@@ -18,7 +18,7 @@ class NeteaseMusic(_PluginBase):
     # 插件描述
     plugin_desc = "通过命令直接搜索并下载歌曲"
     # 插件图标
-    plugin_icon = ""
+    plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
     # 插件版本
     plugin_version = "1.10"
     # 插件作者
