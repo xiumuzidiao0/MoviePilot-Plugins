@@ -1,6 +1,6 @@
 {
   "NeteaseMusic": {
-    "name": "163音乐下载",
+    "name": "网易云音乐下载",
     "description": "通过消息交互下载网易云音乐歌曲",
     "version": "1.10",
     "icon": "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png",
