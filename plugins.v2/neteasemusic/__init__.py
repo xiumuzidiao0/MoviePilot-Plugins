@@ -344,7 +344,7 @@ class NeteaseMusic(_PluginBase):
                     channel=channel,
                     source=source,
                     title="🎵 网易云音乐下载",
-                    text="请输入要搜索的歌曲名称或歌手，例如：/音乐 周杰伦",
+                    text="请输入要搜索的歌曲名称或歌手，例如：/y 周杰伦",
                     userid=userid
                 )
                 logger.info(f"已向用户 {userid} 发送提示消息")
@@ -493,7 +493,7 @@ class NeteaseMusic(_PluginBase):
                     channel=channel,
                     source=source,
                     title="🎵 网易云音乐歌曲选择",
-                    text="请先使用 /音乐 命令搜索歌曲，然后使用 /n 数字 来选择歌曲下载",
+                    text="请先使用 /y 命令搜索歌曲，然后使用 /n 数字 来选择歌曲下载",
                     userid=userid
                 )
                 logger.info(f"已向用户 {userid} 发送提示消息")
@@ -512,7 +512,7 @@ class NeteaseMusic(_PluginBase):
                     channel=channel,
                     source=source,
                     title="🎵 网易云音乐歌曲选择",
-                    text="搜索结果已过期，请重新使用 /音乐 命令搜索歌曲",
+                    text="搜索结果已过期，请重新使用 /y 命令搜索歌曲",
                     userid=userid
                 )
                 logger.info(f"已向用户 {userid} 发送提示消息")
@@ -544,7 +544,7 @@ class NeteaseMusic(_PluginBase):
                     channel=channel,
                     source=source,
                     title="🎵 网易云音乐歌曲选择",
-                    text="会话状态异常，请重新使用 /音乐 命令搜索歌曲",
+                    text="会话状态异常，请重新使用 /y 命令搜索歌曲",
                     userid=userid
                 )
                 logger.info(f"已向用户 {userid} 发送提示消息")
@@ -972,7 +972,7 @@ class NeteaseMusic(_PluginBase):
                                                         'content': [
                                                             {
                                                                 'component': 'li',
-                                                                'text': '在聊天中发送"/音乐 歌曲名/歌手名"直接搜索音乐'
+                                                                'text': '在聊天中发送"/y 歌曲名/歌手名"直接搜索音乐'
                                                             },
                                                             {
                                                                 'component': 'li',
@@ -1160,10 +1160,10 @@ class NeteaseMusic(_PluginBase):
         """
         return [
             {
-                "cmd": "/音乐",
+                "cmd": "/y",
                 "event": EventType.PluginAction,
                 "desc": "网易云音乐下载",
-                "category": "插件",
+                "category": "媒体搜索",
                 "data": {
                     "action": "netease_music_download"
                 }
@@ -1172,7 +1172,7 @@ class NeteaseMusic(_PluginBase):
                 "cmd": "/n",
                 "event": EventType.PluginAction,
                 "desc": "网易云音乐歌曲选择",
-                "category": "插件",
+                "category": "媒体搜索",
                 "data": {
                     "action": "netease_music_select"
                 }
