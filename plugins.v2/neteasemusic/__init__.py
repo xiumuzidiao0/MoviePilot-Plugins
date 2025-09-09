@@ -18,7 +18,7 @@ class NeteaseMusic(_PluginBase):
     # 插件描述
     plugin_desc = "通过命令直接搜索并下载网易云音乐歌曲"
     # 插件图标
-    plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
+    plugin_icon = ""
     # 插件版本
     plugin_version = "1.07"
     # 插件作者
@@ -1163,16 +1163,7 @@ class NeteaseMusic(_PluginBase):
                 "cmd": "/音乐",
                 "event": EventType.PluginAction,
                 "desc": "网易云音乐下载",
-                "category": "媒体搜索",
-                "data": {
-                    "action": "netease_music_download"
-                }
-            },
-            {
-                "cmd": "/音乐下载",
-                "event": EventType.PluginAction,
-                "desc": "网易云音乐下载",
-                "category": "媒体搜索",
+                "category": "插件",
                 "data": {
                     "action": "netease_music_download"
                 }
@@ -1181,7 +1172,7 @@ class NeteaseMusic(_PluginBase):
                 "cmd": "/n",
                 "event": EventType.PluginAction,
                 "desc": "网易云音乐歌曲选择",
-                "category": "媒体搜索",
+                "category": "插件",
                 "data": {
                     "action": "netease_music_select"
                 }
