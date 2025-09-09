@@ -14,7 +14,7 @@ from app.schemas.types import EventType, MessageChannel
 
 class NeteaseMusic(_PluginBase):
     # 插件名称
-    plugin_name = "163音乐下载"
+    plugin_name = "网易云音乐下载"
     # 插件描述
     plugin_desc = "通过命令直接搜索并下载歌曲"
     # 插件图标
