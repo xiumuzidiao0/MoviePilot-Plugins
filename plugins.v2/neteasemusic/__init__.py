@@ -20,7 +20,7 @@ class NeteaseMusic(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
     # 插件版本
-    plugin_version = "1.10"
+    plugin_version = "1.2"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
@@ -43,6 +43,7 @@ class NeteaseMusic(_PluginBase):
     _base_url = None
     _search_limit = None
     _default_quality = None
+    _openlist_url = None  # 添加openlist地址属性
     _sessions = {}  # 用户会话状态存储
 
     def init_plugin(self, config: Optional[dict] = None):
@@ -56,15 +57,18 @@ class NeteaseMusic(_PluginBase):
             self._base_url = config.get("base_url")  # 允许为None
             self._search_limit = config.get("search_limit")  # 允许为None
             self._default_quality = config.get("default_quality")  # 允许为None
+            self._openlist_url = config.get("openlist_url")  # 初始化openlist地址
             
             logger.debug(f"插件配置加载完成: enabled={self._enabled}, base_url={self._base_url}, "
-                        f"search_limit={self._search_limit}, default_quality={self._default_quality}")
+                        f"search_limit={self._search_limit}, default_quality={self._default_quality}, "
+                        f"openlist_url={self._openlist_url}")
         else:
             # 如果没有配置，使用默认值
             self._enabled = False
             self._base_url = None
             self._search_limit = None
             self._default_quality = None
+            self._openlist_url = None
             
             logger.info("未找到插件配置，使用默认配置")
             
@@ -125,8 +129,10 @@ class NeteaseMusic(_PluginBase):
         # 动态生成表单，使用当前配置值作为默认值
         base_url_placeholder = self._base_url or self.DEFAULT_BASE_URL
         search_limit_placeholder = str(self._search_limit or self.DEFAULT_SEARCH_LIMIT)
+        openlist_url_placeholder = self._openlist_url or "https://openlist.example.com/music"
         
-        logger.debug(f"表单占位符值: base_url={base_url_placeholder}, search_limit={search_limit_placeholder}")
+        logger.debug(f"表单占位符值: base_url={base_url_placeholder}, search_limit={search_limit_placeholder}, "
+                    f"openlist_url={openlist_url_placeholder}")
         
         form_config = [
             {
@@ -216,6 +222,23 @@ class NeteaseMusic(_PluginBase):
                                         }
                                     }
                                 ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 6
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VTextField',
+                                        'props': {
+                                            'model': 'openlist_url',
+                                            'label': 'OpenList地址',
+                                            'placeholder': openlist_url_placeholder
+                                        }
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -248,7 +271,8 @@ class NeteaseMusic(_PluginBase):
             "enabled": self._enabled,
             "base_url": self._base_url,
             "search_limit": self._search_limit,
-            "default_quality": self._default_quality
+            "default_quality": self._default_quality,
+            "openlist_url": self._openlist_url
         }
         
         logger.debug(f"配置表单数据: {form_data}")
@@ -802,6 +826,24 @@ class NeteaseMusic(_PluginBase):
         if download_result.get("success"):
             response += "\n✅ 下载完成!"
             logger.info(f"用户 {userid} 下载完成: {song_name} - {artist} ({quality_name})")
+            
+            # 如果配置了openlist地址，则添加链接信息
+            if self._openlist_url:
+                # 从返回结果中获取完整的文件名（包含后缀）
+                data = download_result.get("data", {})
+                file_path = data.get("file_path", "")
+                
+                # 提取文件名部分
+                if file_path:
+                    # 从路径中提取文件名，例如 "/app/downloads/傅如乔 - 微微.flac" -> "傅如乔 - 微微.flac"
+                    filename = file_path.split("/")[-1]
+                    openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
+                    response += f"\n🔗 下载链接: {openlist_link}"
+                else:
+                    # 如果没有文件路径信息，使用原来的处理方式
+                    filename = f"{song_name} - {artist}".replace("/", "_").replace("\\", "_").replace(":", "_")
+                    openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
+                    response += f"\n🔗 下载链接: {openlist_link}"
         else:
             error_msg = download_result.get('message', '未知错误')
             response += f"\n❌ 下载失败: {error_msg}"
@@ -1006,6 +1048,10 @@ class NeteaseMusic(_PluginBase):
                                                             {
                                                                 'component': 'li',
                                                                 'text': '默认音质：下载歌曲的默认音质，支持多种音质选项'
+                                                            },
+                                                            {
+                                                                'component': 'li',
+                                                                'text': 'OpenList地址：歌曲下载完成后的链接地址'
                                                             }
                                                         ]
                                                     },
@@ -1178,4 +1224,3 @@ class NeteaseMusic(_PluginBase):
                 }
             }
         ]
-
