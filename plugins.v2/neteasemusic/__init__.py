@@ -201,7 +201,7 @@ class NeteaseMusic(*BaseClasses):
         
         try:
             # 使用配置的搜索限制或默认值
-            search_limit = limit or self._search_limit or self.DEFAULT_SEARCH_LIMIT
+            search_limit =self._search_limit or self.DEFAULT_SEARCH_LIMIT
             result = self._api_tester.search_music(keyword, limit=search_limit)
             
             if result.get("success"):
@@ -233,7 +233,7 @@ class NeteaseMusic(*BaseClasses):
                 response_text = f"🔍 搜索到 {len(songs)} 首歌曲:\n\n" + "\n\n".join(song_list)
                 
                 # 获取默认音质：优先使用传入参数，其次界面配置默认音质，最后系统默认音质
-                default_quality = quality or self._default_quality or self.DEFAULT_QUALITY
+                default_quality =self._default_quality or self.DEFAULT_QUALITY
                 
                 if default_quality:
                     quality_names = {
@@ -245,8 +245,8 @@ class NeteaseMusic(*BaseClasses):
                         "jyeffect": "高清环绕声",
                         "jymaster": "超清母带"
                     }
-                    quality_display = quality_names.get(default_quality, default_quality)
-                    response_text += f"\n\n🎵 默认下载音质: {quality_display} ({default_quality})"
+                    quality_display = quality_names.get(self._default_quality, self._default_quality)
+                    response_text += f"\n\n🎵 默认下载音质: {self._default_quality} ({self._default_quality})"
                     response_text += "\n💡 可使用 'netease-music-download' 工具并传入歌曲ID进行下载"
                 
                 return {
