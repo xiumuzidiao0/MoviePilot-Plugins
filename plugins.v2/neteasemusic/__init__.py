@@ -50,7 +50,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
     # 插件版本
-    plugin_version = "1.21"
+    plugin_version = "1.22"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
@@ -179,6 +179,11 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         try:
             # 使用配置的搜索限制或默认值
             search_limit = limit or self._search_limit or self.DEFAULT_SEARCH_LIMIT
+            # 确保API测试器已初始化
+            if not hasattr(self, '_api_tester') or not self._api_tester:
+                api_base_url = self._base_url or self.DEFAULT_BASE_URL
+                self._api_tester = NeteaseMusicAPITester(base_url=api_base_url)
+            
             search_result = self._api_tester.search_music(keyword, limit=search_limit)
             
             if search_result.get("success"):
@@ -237,6 +242,11 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         try:
             # 使用配置的默认音质或参数指定的音质
             download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
+            # 确保API测试器已初始化
+            if not hasattr(self, '_api_tester') or not self._api_tester:
+                api_base_url = self._base_url or self.DEFAULT_BASE_URL
+                self._api_tester = NeteaseMusicAPITester(base_url=api_base_url)
+                
             download_result = self._api_tester.download_music_for_link(song_id, download_quality)
             
             if download_result.get("success"):
