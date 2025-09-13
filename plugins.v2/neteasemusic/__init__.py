@@ -299,7 +299,7 @@ class NeteaseMusic(*BaseClasses):
             }
         ]
     )
-    def mcp_download_music(self, song_id: str, quality: str = "exhigh") -> dict:
+    def mcp_download_music(self, song_id: str, quality: Optional[str] = None) -> dict:
         """MCP音乐下载工具"""
         if not self._enabled:
             return {
@@ -314,7 +314,7 @@ class NeteaseMusic(*BaseClasses):
         
         # 验证音质参数
         valid_qualities = ["standard", "exhigh", "lossless", "hires", "sky", "jyeffect", "jymaster"]
-        if quality not in valid_qualities:
+        if quality and quality not in valid_qualities:
             return {
                 "content": [
                     {
@@ -327,6 +327,7 @@ class NeteaseMusic(*BaseClasses):
         
         try:
             # 使用配置的默认音质或参数指定的音质
+            # 如果没有指定quality参数，则使用界面配置的默认音质
             download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
             result = self._api_tester.download_music_for_link(song_id, download_quality)
             
