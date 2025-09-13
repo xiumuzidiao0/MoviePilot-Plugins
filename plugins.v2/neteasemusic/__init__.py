@@ -176,17 +176,10 @@ class NeteaseMusic(*BaseClasses):
                 "description": "返回结果数量",
                 "required": False,
                 "type": "integer"
-            },
-            {
-                "name": "quality",
-                "description": "默认音质等级（用于后续下载）",
-                "required": False,
-                "type": "string",
-                "enum": ["standard", "exhigh", "lossless", "hires", "sky", "jyeffect", "jymaster"]
             }
         ]
     )
-    def mcp_search_music(self, keyword: str, limit: int = 5, quality: str = "") -> dict:
+    def mcp_search_music(self, keyword: str, limit: int = 5) -> dict:
         """MCP音乐搜索工具"""
         if not self._enabled:
             return {
@@ -231,23 +224,6 @@ class NeteaseMusic(*BaseClasses):
                     song_list.append(song_info)
                 
                 response_text = f"🔍 搜索到 {len(songs)} 首歌曲:\n\n" + "\n\n".join(song_list)
-                
-                # 获取默认音质：优先使用传入参数，其次界面配置默认音质，最后系统默认音质
-                default_quality = quality or self._default_quality or self.DEFAULT_QUALITY
-                
-                if default_quality:
-                    quality_names = {
-                        "standard": "标准音质",
-                        "exhigh": "极高音质", 
-                        "lossless": "无损音质",
-                        "hires": "Hi-Res音质",
-                        "sky": "沉浸环绕声",
-                        "jyeffect": "高清环绕声",
-                        "jymaster": "超清母带"
-                    }
-                    quality_display = quality_names.get(default_quality, default_quality)
-                    response_text += f"\n\n🎵 默认下载音质: {quality_display} ({default_quality})"
-                    response_text += "\n💡 可使用 'netease-music-download' 工具并传入歌曲ID进行下载"
                 
                 return {
                     "content": [
@@ -301,7 +277,7 @@ class NeteaseMusic(*BaseClasses):
             }
         ]
     )
-    def mcp_download_music(self, song_id: str, quality: str = "") -> dict:
+    def mcp_download_music(self, song_id: str, quality: str = "exhigh") -> dict:
         """MCP音乐下载工具"""
         if not self._enabled:
             return {
@@ -315,7 +291,7 @@ class NeteaseMusic(*BaseClasses):
             }
         
         try:
-            # 获取默认音质：优先使用传入参数，其次界面配置默认音质，最后系统默认音质
+            # 使用配置的默认音质或参数指定的音质
             download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
             result = self._api_tester.download_music_for_link(song_id, download_quality)
             
@@ -327,14 +303,7 @@ class NeteaseMusic(*BaseClasses):
                 file_size = data.get("file_size_formatted", "未知大小")
                 file_path = data.get("file_path", "")
                 
-                # 验证音质与文件类型是否匹配
-                warning_text = ""
-                if download_quality == "jymaster" and data.get("file_type", "").lower() not in ["flac", "ape", "wav", "dff", "dsf"]:
-                    warning_text = "\n⚠️ 警告: 母带音质通常应为FLAC/APE/WAV/DFF/DSF格式，当前文件为MP3格式"
-                elif download_quality == "lossless" and data.get("file_type", "").lower() not in ["flac", "ape", "wav"]:
-                    warning_text = "\n⚠️ 警告: 无损音质通常应为FLAC/APE/WAV格式，当前文件为MP3格式"
-                
-                response_text = f"✅ 下载完成!\n\n歌曲: {song_name}\n艺术家: {artist}\n音质: {quality_name}\n文件大小: {file_size}{warning_text}"
+                response_text = f"✅ 下载完成!\n\n歌曲: {song_name}\n艺术家: {artist}\n音质: {quality_name}\n文件大小: {file_size}"
                 
                 # 如果配置了openlist地址，则添加链接信息
                 if self._openlist_url and file_path:
@@ -407,58 +376,6 @@ class NeteaseMusic(*BaseClasses):
         if not genre and not mood:
             prompt_text = "请推荐一些好听的音乐"
             
-        return {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": {
-                        "type": "text",
-                        "text": prompt_text
-                    }
-                }
-            ]
-        }
-
-    # 添加MCP提示：音质选择指导
-    @mcp_prompt(
-        name="music-quality-selection-prompt",
-        description="音乐音质选择指导提示",
-        parameters=[
-            {
-                "name": "song_id",
-                "description": "歌曲ID",
-                "required": True,
-                "type": "string"
-            },
-            {
-                "name": "song_name",
-                "description": "歌曲名称",
-                "required": True,
-                "type": "string"
-            }
-        ]
-    )
-    def music_quality_selection_prompt(self, song_id: str, song_name: str) -> dict:
-        """音乐音质选择指导提示"""
-        # 定义音质选项
-        quality_options = [
-            {"code": "standard", "name": "标准音质", "desc": "128kbps MP3"},
-            {"code": "exhigh", "name": "极高音质", "desc": "320kbps MP3"},
-            {"code": "lossless", "name": "无损音质", "desc": "FLAC"},
-            {"code": "hires", "name": "Hi-Res音质", "desc": "24bit/96kHz"},
-            {"code": "sky", "name": "沉浸环绕声", "desc": "空间音频"},
-            {"code": "jyeffect", "name": "高清环绕声", "desc": "环绕声效果"},
-            {"code": "jymaster", "name": "超清母带", "desc": "母带音质"}
-        ]
-        
-        # 构建音质选择提示
-        quality_list = []
-        for i, quality in enumerate(quality_options, 1):
-            quality_list.append(f"{i}. {quality['name']} ({quality['code']}): {quality['desc']}")
-        
-        prompt_text = f"请为歌曲《{song_name}》选择下载音质：\n\n" + "\n".join(quality_list)
-        prompt_text += f"\n\n选择后请调用 'netease-music-download' 工具，传入歌曲ID: {song_id} 和选择的音质参数进行下载。"
-        
         return {
             "messages": [
                 {
