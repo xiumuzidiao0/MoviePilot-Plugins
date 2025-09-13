@@ -240,10 +240,13 @@ class NeteaseMusic(*BaseClasses):
                     artists = song.get("artists", "") or song.get("ar_name", "未知艺术家")
                     album = song.get("album", "未知专辑")
                     song_id = song.get("id", "")
+                    pic_url = song.get("picUrl", "") or song.get("album_picUrl", "")
                     
                     song_info = f"{i}. {name} - {artists}\n   专辑: {album}"
                     if song_id:
                         song_info += f"\n   ID: {song_id}"
+                    if pic_url:
+                        song_info += f"\n   🖼️ 封面: {pic_url}"
                     song_list.append(song_info)
                 
                 response_text = f"🔍 搜索到 {len(songs)} 首歌曲:\n\n" + "\n\n".join(song_list)
@@ -325,13 +328,8 @@ class NeteaseMusic(*BaseClasses):
                 quality_name = data.get("quality_name", "未知音质")
                 file_size = data.get("file_size_formatted", "未知大小")
                 file_path = data.get("file_path", "")
-                pic_url = data.get("pic_url", "")  # 获取封面链接
                 
                 response_text = f"✅ 下载完成!\n\n歌曲: {song_name}\n艺术家: {artist}\n音质: {quality_name}\n文件大小: {file_size}"
-                
-                # 如果有封面链接，则添加到返回信息中
-                if pic_url:
-                    response_text += f"\n\n🖼️ 封面: {pic_url}"
                 
                 # 如果配置了openlist地址，则添加链接信息
                 if self._openlist_url and file_path:
@@ -851,7 +849,11 @@ class NeteaseMusic(*BaseClasses):
             song = songs[i]
             name = song.get('name', '')
             artists = song.get('artists', '') or song.get('ar_name', '')
+            pic_url = song.get('picUrl', '') or song.get('album_picUrl', '')
+            
             response += f"{i + 1}. {name} - {artists}\n"
+            if pic_url:
+                response += f"   🖼️ 封面: {pic_url}\n"
         
         # 添加翻页提示
         if total_pages > 1:
@@ -1189,7 +1191,6 @@ class NeteaseMusic(*BaseClasses):
         song_name = selected_song.get('name', '')
         song_id = str(selected_song.get('id', ''))
         artist = selected_song.get('artists', '') or selected_song.get('ar_name', '')
-        pic_url = selected_song.get('picUrl', '') or selected_song.get('pic_url', '')  # 获取封面链接
         
         logger.info(f"用户 {userid} 准备下载歌曲: {song_name} - {artist} ({quality_name})")
         
@@ -1219,19 +1220,10 @@ class NeteaseMusic(*BaseClasses):
             response += "\n✅ 下载完成!"
             logger.info(f"用户 {userid} 下载完成: {song_name} - {artist} ({quality_name})")
             
-            # 从下载结果中获取更准确的封面链接
-            data = download_result.get("data", {})
-            download_pic_url = data.get("pic_url", "")
-            # 如果下载结果中有封面链接，则优先使用
-            final_pic_url = download_pic_url or pic_url
-            
-            # 如果有封面链接，则添加到返回信息中
-            if final_pic_url:
-                response += f"\n🖼️ 封面: {final_pic_url}"
-            
             # 如果配置了openlist地址，则添加链接信息
             if self._openlist_url:
                 # 从返回结果中获取完整的文件名（包含后缀）
+                data = download_result.get("data", {})
                 file_path = data.get("file_path", "")
                 
                 # 提取文件名部分
