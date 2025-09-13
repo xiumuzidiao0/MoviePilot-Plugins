@@ -316,7 +316,7 @@ class NeteaseMusic(*BaseClasses):
         
         try:
             # 获取默认音质：优先使用传入参数，其次界面配置默认音质，最后系统默认音质
-            download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
+            download_quality =self._default_quality or self.DEFAULT_QUALITY
             result = self._api_tester.download_music_for_link(song_id, download_quality)
             
             if result.get("success"):
