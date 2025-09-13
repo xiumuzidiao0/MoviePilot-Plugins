@@ -51,7 +51,7 @@ class NeteaseMusic(*BaseClasses):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
     # 插件版本
-    plugin_version = "1.25"
+    plugin_version = "1.26"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
@@ -182,7 +182,15 @@ class NeteaseMusic(*BaseClasses):
     def mcp_search_music(self, keyword: str, limit: int = 5) -> dict:
         """MCP音乐搜索工具"""
         if not self._enabled:
-            return {"success": False, "message": "插件未启用"}
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "插件未启用"
+                    }
+                ],
+                "isError": True
+            }
         
         try:
             # 使用配置的搜索限制或默认值
@@ -191,24 +199,63 @@ class NeteaseMusic(*BaseClasses):
             
             if result.get("success"):
                 songs = result.get("data", [])
-                formatted_songs = []
-                for song in songs:
-                    formatted_songs.append({
-                        "id": song.get("id"),
-                        "name": song.get("name"),
-                        "artists": song.get("artists") or song.get("ar_name", ""),
-                        "album": song.get("album", "")
-                    })
+                if not songs:
+                    return {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "未找到相关歌曲"
+                            }
+                        ],
+                        "isError": False
+                    }
+                
+                # 格式化歌曲信息
+                song_list = []
+                for i, song in enumerate(songs[:search_limit], 1):
+                    name = song.get("name", "未知歌曲")
+                    artists = song.get("artists", "") or song.get("ar_name", "未知艺术家")
+                    album = song.get("album", "未知专辑")
+                    song_id = song.get("id", "")
+                    
+                    song_info = f"{i}. {name} - {artists}\n   专辑: {album}"
+                    if song_id:
+                        song_info += f"\n   ID: {song_id}"
+                    song_list.append(song_info)
+                
+                response_text = f"🔍 搜索到 {len(songs)} 首歌曲:\n\n" + "\n\n".join(song_list)
+                
                 return {
-                    "success": True,
-                    "songs": formatted_songs,
-                    "count": len(formatted_songs)
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": response_text
+                        }
+                    ],
+                    "isError": False
                 }
             else:
-                return {"success": False, "message": result.get("message", "搜索失败")}
+                error_msg = result.get("message", "搜索失败")
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"搜索失败: {error_msg}"
+                        }
+                    ],
+                    "isError": True
+                }
         except Exception as e:
-            logger.error(f"MCP音乐搜索出错: {e}")
-            return {"success": False, "message": f"搜索异常: {str(e)}"}
+            logger.error(f"MCP音乐搜索出错: {e}", exc_info=True)
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"搜索异常: {str(e)}"
+                    }
+                ],
+                "isError": True
+            }
 
     # 添加MCP工具：下载音乐
     @mcp_tool(
@@ -233,7 +280,15 @@ class NeteaseMusic(*BaseClasses):
     def mcp_download_music(self, song_id: str, quality: str = "exhigh") -> dict:
         """MCP音乐下载工具"""
         if not self._enabled:
-            return {"success": False, "message": "插件未启用"}
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "插件未启用"
+                    }
+                ],
+                "isError": True
+            }
         
         try:
             # 使用配置的默认音质或参数指定的音质
@@ -242,19 +297,52 @@ class NeteaseMusic(*BaseClasses):
             
             if result.get("success"):
                 data = result.get("data", {})
+                song_name = data.get("name", "未知歌曲")
+                artist = data.get("artist", "未知艺术家")
+                quality_name = data.get("quality_name", "未知音质")
+                file_size = data.get("file_size_formatted", "未知大小")
+                file_path = data.get("file_path", "")
+                
+                response_text = f"✅ 下载完成!\n\n歌曲: {song_name}\n艺术家: {artist}\n音质: {quality_name}\n文件大小: {file_size}"
+                
+                # 如果配置了openlist地址，则添加链接信息
+                if self._openlist_url and file_path:
+                    # 从路径中提取文件名
+                    filename = file_path.split("/")[-1]
+                    openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
+                    response_text += f"\n\n🔗 下载链接: {openlist_link}"
+                
                 return {
-                    "success": True,
-                    "song_name": data.get("name", ""),
-                    "artist": data.get("artist", ""),
-                    "quality": data.get("quality_name", ""),
-                    "file_size": data.get("file_size_formatted", ""),
-                    "file_path": data.get("file_path", "")
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": response_text
+                        }
+                    ],
+                    "isError": False
                 }
             else:
-                return {"success": False, "message": result.get("message", "下载失败")}
+                error_msg = result.get("message", "下载失败")
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"下载失败: {error_msg}"
+                        }
+                    ],
+                    "isError": True
+                }
         except Exception as e:
-            logger.error(f"MCP音乐下载出错: {e}")
-            return {"success": False, "message": f"下载异常: {str(e)}"}
+            logger.error(f"MCP音乐下载出错: {e}", exc_info=True)
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"下载异常: {str(e)}"
+                    }
+                ],
+                "isError": True
+            }
 
     # 添加MCP提示：音乐推荐
     @mcp_prompt(
