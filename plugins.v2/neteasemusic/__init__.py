@@ -410,6 +410,50 @@ class NeteaseMusic(*BaseClasses):
             ]
         }
 
+    # 添加MCP提示：音质参数说明
+    @mcp_prompt(
+        name="music-quality-info-prompt",
+        description="音质参数说明提示",
+        parameters=[]
+    )
+    def music_quality_info_prompt(self) -> dict:
+        """音质参数说明提示"""
+        # 定义音质选项及其中文对应关系
+        quality_options = [
+            {"code": "standard", "name": "标准音质", "desc": "128kbps MP3"},
+            {"code": "exhigh", "name": "极高音质", "desc": "320kbps MP3"},
+            {"code": "lossless", "name": "无损音质", "desc": "FLAC"},
+            {"code": "hires", "name": "Hi-Res音质", "desc": "24bit/96kHz"},
+            {"code": "sky", "name": "沉浸环绕声", "desc": "空间音频"},
+            {"code": "jyeffect", "name": "高清环绕声", "desc": "环绕声效果"},
+            {"code": "jymaster", "name": "超清母带", "desc": "母带音质"}
+        ]
+        
+        # 构建音质信息说明
+        quality_info = []
+        quality_info.append("网易云音乐支持的音质参数及其中文对应关系:")
+        quality_info.append("")
+        
+        for quality in quality_options:
+            quality_info.append(f"• {quality['code']} - {quality['name']} ({quality['desc']})")
+        
+        quality_info.append("")
+        quality_info.append("在使用MCP工具时，可以传入以上音质代码作为quality参数的值。")
+        
+        prompt_text = "\n".join(quality_info)
+        
+        return {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": prompt_text
+                    }
+                }
+            ]
+        }
+
     # 添加MCP工具：获取音质选项
     @mcp_tool(
         name="netease-music-get-qualities",
