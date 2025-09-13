@@ -176,10 +176,17 @@ class NeteaseMusic(*BaseClasses):
                 "description": "返回结果数量",
                 "required": False,
                 "type": "integer"
+            },
+            {
+                "name": "quality",
+                "description": "音质等级（用于在搜索结果中显示音质信息）",
+                "required": False,
+                "type": "string",
+                "enum": ["standard", "exhigh", "lossless", "hires", "sky", "jyeffect", "jymaster"]
             }
         ]
     )
-    def mcp_search_music(self, keyword: str, limit: int = 5) -> dict:
+    def mcp_search_music(self, keyword: str, limit: int = 5, quality: Optional[str] = None) -> dict:
         """MCP音乐搜索工具"""
         if not self._enabled:
             return {
@@ -212,6 +219,9 @@ class NeteaseMusic(*BaseClasses):
                 
                 # 格式化歌曲信息
                 song_list = []
+                # 确定要显示的音质信息
+                display_quality = quality or self._default_quality or self.DEFAULT_QUALITY
+                
                 for i, song in enumerate(songs[:search_limit], 1):
                     name = song.get("name", "未知歌曲")
                     artists = song.get("artists", "") or song.get("ar_name", "未知艺术家")
@@ -221,6 +231,21 @@ class NeteaseMusic(*BaseClasses):
                     song_info = f"{i}. {name} - {artists}\n   专辑: {album}"
                     if song_id:
                         song_info += f"\n   ID: {song_id}"
+                    
+                    # 如果提供了音质参数，在搜索结果中显示音质信息
+                    if quality:
+                        quality_names = {
+                            "standard": "标准音质",
+                            "exhigh": "极高音质", 
+                            "lossless": "无损音质",
+                            "hires": "Hi-Res音质",
+                            "sky": "沉浸环绕声",
+                            "jyeffect": "高清环绕声",
+                            "jymaster": "超清母带"
+                        }
+                        quality_display = quality_names.get(quality, quality)
+                        song_info += f"\n   音质: {quality_display}"
+                    
                     song_list.append(song_info)
                 
                 response_text = f"🔍 搜索到 {len(songs)} 首歌曲:\n\n" + "\n\n".join(song_list)
@@ -277,7 +302,7 @@ class NeteaseMusic(*BaseClasses):
             }
         ]
     )
-    def mcp_download_music(self, song_id: str, quality: str = None) -> dict:
+    def mcp_download_music(self, song_id: str, quality: Optional[str] = None) -> dict:
         """MCP音乐下载工具"""
         if not self._enabled:
             return {
@@ -325,7 +350,9 @@ class NeteaseMusic(*BaseClasses):
                 }
             
             # 使用指定的音质或默认音质
-            download_quality = quality or default_quality
+            download_quality = quality or default_quality or self.DEFAULT_QUALITY
+            logger.info(f"MCP下载音乐，歌曲ID: {song_id}, 请求音质: {quality}, 使用音质: {download_quality}, 默认音质: {default_quality}")
+            
             result = self._api_tester.download_music_for_link(song_id, download_quality)
             
             if result.get("success"):
