@@ -50,7 +50,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
     # 插件版本
-    plugin_version = "1.23"
+    plugin_version = "1.24"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
@@ -201,11 +201,15 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     name = song.get('name', '')
                     artists = song.get('artists', '') or song.get('ar_name', '')
                     song_id = song.get('id', '')
+                    album = song.get('album', '')
+                    pic_url = song.get('picUrl', '')
                     formatted_songs.append({
                         "index": i,
                         "id": song_id,
                         "name": name,
-                        "artists": artists
+                        "artists": artists,
+                        "album": album,
+                        "pic_url": pic_url
                     })
                 
                 logger.info(f"[MCP工具] 搜索完成，找到{len(formatted_songs)}首歌曲")
@@ -269,6 +273,12 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
             if download_result.get("success"):
                 data = download_result.get("data", {})
                 file_path = data.get("file_path", "")
+                song_name = data.get("name", "")
+                artist = data.get("artist", "")
+                album = data.get("album", "")
+                file_size = data.get("file_size_formatted", "")
+                file_type = data.get("file_type", "")
+                pic_url = data.get("pic_url", "")
                 
                 # 提取文件名
                 filename = ""
@@ -278,9 +288,15 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 result = {
                     "success": True,
                     "song_id": song_id,
+                    "song_name": song_name,
+                    "artist": artist,
+                    "album": album,
                     "quality": download_quality,
                     "filename": filename,
                     "file_path": file_path,
+                    "file_size": file_size,
+                    "file_type": file_type,
+                    "pic_url": pic_url,
                     "message": "下载完成"
                 }
                 
@@ -302,6 +318,214 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         except Exception as e:
             logger.error(f"[MCP工具] 下载音乐时发生异常: {e}", exc_info=True)
             return {"success": False, "message": f"下载异常: {str(e)}"}
+
+    @mcp_tool(
+        name="get_supported_qualities",
+        description="获取支持的音质选项",
+        parameters=[]
+    )
+    def get_supported_qualities_tool(self) -> dict:
+        """获取支持的音质选项工具"""
+        logger.info("[MCP工具] 获取支持的音质选项")
+        if not self._enabled:
+            logger.warning("[MCP工具] 插件未启用")
+            return {"success": False, "message": "插件未启用"}
+        
+        try:
+            quality_options = [
+                {"code": "standard", "name": "标准音质", "desc": "128kbps MP3"},
+                {"code": "exhigh", "name": "极高音质", "desc": "320kbps MP3"},
+                {"code": "lossless", "name": "无损音质", "desc": "FLAC"},
+                {"code": "hires", "name": "Hi-Res音质", "desc": "24bit/96kHz"},
+                {"code": "sky", "name": "沉浸环绕声", "desc": "空间音频"},
+                {"code": "jyeffect", "name": "高清环绕声", "desc": "环绕声效果"},
+                {"code": "jymaster", "name": "超清母带", "desc": "母带音质"}
+            ]
+            
+            logger.info("[MCP工具] 成功获取音质选项列表")
+            return {
+                "success": True,
+                "qualities": quality_options,
+                "message": "获取音质选项成功"
+            }
+        except Exception as e:
+            logger.error(f"[MCP工具] 获取音质选项时发生异常: {e}", exc_info=True)
+            return {"success": False, "message": f"获取音质选项异常: {str(e)}"}
+
+    @mcp_tool(
+        name="test_connection",
+        description="测试网易云音乐API连接",
+        parameters=[
+            {
+                "name": "url",
+                "description": "API基础URL，如果为空则使用插件配置的URL",
+                "required": False,
+                "type": "string"
+            }
+        ]
+    )
+    def test_connection_tool(self, url: str = "") -> dict:
+        """测试API连接工具"""
+        logger.info(f"[MCP工具] 测试API连接: url={url}")
+        if not self._enabled:
+            logger.warning("[MCP工具] 插件未启用")
+            return {"success": False, "message": "插件未启用"}
+        
+        try:
+            # 确保API测试器已初始化
+            if not hasattr(self, '_api_tester') or not self._api_tester:
+                logger.warning("[MCP工具] API测试器未初始化，正在重新初始化")
+                api_base_url = self._base_url or self.DEFAULT_BASE_URL
+                self._api_tester = NeteaseMusicAPITester(base_url=api_base_url)
+                logger.info(f"[MCP工具] API测试器重新初始化完成，基础URL: {api_base_url}")
+            
+            # 使用提供的URL或当前配置的URL
+            api_url = url or self._base_url or self.DEFAULT_BASE_URL
+            logger.debug(f"[MCP工具] 测试API地址: {api_url}")
+            
+            # 测试健康检查接口
+            test_url = f"{api_url.rstrip('/')}/health"
+            logger.debug(f"[MCP工具] 健康检查URL: {test_url}")
+            
+            response = self._api_tester.session.get(test_url, timeout=10)
+            logger.debug(f"[MCP工具] 健康检查响应: status_code={response.status_code}")
+            
+            if response.status_code == 200:
+                logger.info(f"[MCP工具] API连接测试成功: {api_url}")
+                return {
+                    "success": True,
+                    "message": f"成功连接到API服务器: {api_url}",
+                    "url": api_url,
+                    "status_code": response.status_code
+                }
+            else:
+                logger.warning(f"[MCP工具] API连接测试失败: status_code={response.status_code}")
+                return {
+                    "success": False,
+                    "message": f"连接失败，状态码: {response.status_code}",
+                    "url": api_url,
+                    "status_code": response.status_code
+                }
+        except Exception as e:
+            logger.error(f"[MCP工具] API连接测试异常: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"连接异常: {str(e)}",
+                "url": url or self._base_url or self.DEFAULT_BASE_URL
+            }
+
+    @mcp_prompt(
+        name="music-search-prompt",
+        description="音乐搜索提示，帮助用户构建搜索查询",
+        parameters=[
+            {
+                "name": "user_request",
+                "description": "用户的音乐搜索请求",
+                "required": True
+            }
+        ]
+    )
+    def music_search_prompt(self, user_request: str) -> dict:
+        """音乐搜索提示"""
+        logger.info(f"[MCP提示] 生成音乐搜索提示: user_request={user_request}")
+        
+        prompt_content = (
+            f"# 网易云音乐搜索查询构建\n\n"
+            f"用户请求: **{user_request}**\n\n"
+            f"## 请根据用户请求构建合适的搜索查询:\n"
+            f"1. 提取关键词（歌曲名、歌手名、专辑名等）\n"
+            f"2. 确保查询简洁明确\n"
+            f"3. 避免使用特殊符号\n\n"
+            f"## 示例格式:\n"
+            f"- 周杰伦 告白气球\n"
+            f"- 陈奕迅 十年\n"
+            f"- 海阔天空 Beyond\n\n"
+            f"请提供一个优化后的搜索查询字符串。"
+        )
+
+        logger.debug("[MCP提示] 音乐搜索提示生成完成")
+        return {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": prompt_content
+                    }
+                }
+            ]
+        }
+
+    @mcp_prompt(
+        name="music-download-prompt",
+        description="音乐下载提示，帮助用户选择合适的音质",
+        parameters=[
+            {
+                "name": "song_info",
+                "description": "歌曲信息",
+                "required": True
+            },
+            {
+                "name": "usage_scenario",
+                "description": "使用场景（如日常听歌、收藏、专业用途等）",
+                "required": False
+            }
+        ]
+    )
+    def music_download_prompt(self, song_info: str, usage_scenario: str = "") -> dict:
+        """音乐下载提示"""
+        logger.info(f"[MCP提示] 生成音乐下载提示: song_info={song_info}, usage_scenario={usage_scenario}")
+        
+        if usage_scenario:
+            prompt_content = (
+                f"# 网易云音乐下载音质选择\n\n"
+                f"歌曲信息: **{song_info}**\n"
+                f"使用场景: **{usage_scenario}**\n\n"
+                f"## 请根据歌曲信息和使用场景推荐合适的音质:\n"
+                f"1. 考虑文件大小和音质的平衡\n"
+                f"2. 根据使用场景推荐音质等级\n"
+                f"3. 简要说明推荐理由\n\n"
+                f"## 音质选项:\n"
+                f"- standard (128kbps MP3) - 标准音质\n"
+                f"- exhigh (320kbps MP3) - 极高音质\n"
+                f"- lossless (FLAC) - 无损音质\n"
+                f"- hires (24bit/96kHz) - Hi-Res音质\n"
+                f"- sky (空间音频) - 沉浸环绕声\n"
+                f"- jyeffect (环绕声效果) - 高清环绕声\n"
+                f"- jymaster (母带音质) - 超清母带\n\n"
+                f"请推荐一个合适的音质选项。"
+            )
+        else:
+            prompt_content = (
+                f"# 网易云音乐下载音质选择\n\n"
+                f"歌曲信息: **{song_info}**\n\n"
+                f"## 请根据歌曲信息推荐合适的音质:\n"
+                f"1. 考虑文件大小和音质的平衡\n"
+                f"2. 根据歌曲类型推荐音质等级\n"
+                f"3. 简要说明推荐理由\n\n"
+                f"## 音质选项:\n"
+                f"- standard (128kbps MP3) - 标准音质\n"
+                f"- exhigh (320kbps MP3) - 极高音质\n"
+                f"- lossless (FLAC) - 无损音质\n"
+                f"- hires (24bit/96kHz) - Hi-Res音质\n"
+                f"- sky (空间音频) - 沉浸环绕声\n"
+                f"- jyeffect (环绕声效果) - 高清环绕声\n"
+                f"- jymaster (母带音质) - 超清母带\n\n"
+                f"请推荐一个合适的音质选项。"
+            )
+
+        logger.debug("[MCP提示] 音乐下载提示生成完成")
+        return {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": prompt_content
+                    }
+                }
+            ]
+        }
 
     def stop_service(self):
         """插件停止时注销工具和提示"""
