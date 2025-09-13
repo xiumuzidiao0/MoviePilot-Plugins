@@ -11,8 +11,38 @@ from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import EventType, MessageChannel
 
+# 导入MCP插件助手
+try:
+    from app.plugins.mcpserver.dev.mcp_dev import (
+        mcp_tool,
+        mcp_prompt,
+        MCPDecoratorMixin
+    )
+    MCP_DEV_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"MCPServer插件不可用，MCP功能将被禁用。错误详情: {str(e)}")
+    MCP_DEV_AVAILABLE = False
 
-class NeteaseMusic(_PluginBase):
+    # 定义空的装饰器，避免语法错误
+    def mcp_tool(*args, **kwargs):
+        """空的MCP工具装饰器，当MCP不可用时使用"""
+        def decorator(func):
+            return func
+        return decorator
+
+    def mcp_prompt(*args, **kwargs):
+        """空的MCP提示装饰器，当MCP不可用时使用"""
+        def decorator(func):
+            return func
+        return decorator
+
+    # 定义空的Mixin类
+    class MCPDecoratorMixin:
+        """空的MCP装饰器混入类，当MCP不可用时使用"""
+        pass
+
+
+class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
     # 插件名称
     plugin_name = "网易云音乐下载"
     # 插件描述
@@ -20,7 +50,7 @@ class NeteaseMusic(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
     # 插件版本
-    plugin_version = "1.20"
+    plugin_version = "1.21"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
@@ -83,6 +113,14 @@ class NeteaseMusic(_PluginBase):
         # 初始化会话存储
         self._sessions = {}
         logger.info("插件初始化完成")
+        
+        # 初始化MCP功能
+        if MCP_DEV_AVAILABLE:
+            try:
+                logger.info("初始化MCP功能")
+                self.init_mcp_decorators()
+            except Exception as e:
+                logger.error(f"MCP初始化失败: {str(e)}")
 
     def _log_supported_qualities(self):
         """
@@ -112,6 +150,136 @@ class NeteaseMusic(_PluginBase):
         logger.info(f"设置插件启用状态: {enabled}")
         self._enabled = enabled
         # 可以在这里添加其他启用/禁用时需要处理的逻辑
+
+    # ==================== MCP工具和提示 ====================
+
+    @mcp_tool(
+        name="search_music",
+        description="搜索网易云音乐歌曲",
+        parameters=[
+            {
+                "name": "keyword",
+                "description": "搜索关键词，可以是歌曲名或歌手名",
+                "required": True,
+                "type": "string"
+            },
+            {
+                "name": "limit",
+                "description": "返回结果数量，默认为8",
+                "required": False,
+                "type": "integer"
+            }
+        ]
+    )
+    def search_music_tool(self, keyword: str, limit: int = 8) -> dict:
+        """搜索音乐工具"""
+        if not self._enabled:
+            return {"success": False, "message": "插件未启用"}
+        
+        try:
+            # 使用配置的搜索限制或默认值
+            search_limit = limit or self._search_limit or self.DEFAULT_SEARCH_LIMIT
+            search_result = self._api_tester.search_music(keyword, limit=search_limit)
+            
+            if search_result.get("success"):
+                songs = search_result.get("data", [])
+                formatted_songs = []
+                for i, song in enumerate(songs, 1):
+                    name = song.get('name', '')
+                    artists = song.get('artists', '') or song.get('ar_name', '')
+                    song_id = song.get('id', '')
+                    formatted_songs.append({
+                        "index": i,
+                        "id": song_id,
+                        "name": name,
+                        "artists": artists
+                    })
+                
+                return {
+                    "success": True,
+                    "songs": formatted_songs,
+                    "total": len(formatted_songs),
+                    "message": f"搜索完成，找到{len(formatted_songs)}首歌曲"
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": search_result.get('message', '搜索失败')
+                }
+        except Exception as e:
+            logger.error(f"搜索音乐时发生异常: {e}", exc_info=True)
+            return {"success": False, "message": f"搜索异常: {str(e)}"}
+
+    @mcp_tool(
+        name="download_music",
+        description="下载网易云音乐歌曲",
+        parameters=[
+            {
+                "name": "song_id",
+                "description": "歌曲ID",
+                "required": True,
+                "type": "string"
+            },
+            {
+                "name": "quality",
+                "description": "音质等级，可选值: standard, exhigh, lossless, hires, sky, jyeffect, jymaster",
+                "required": False,
+                "type": "string",
+                "enum": ["standard", "exhigh", "lossless", "hires", "sky", "jyeffect", "jymaster"]
+            }
+        ]
+    )
+    def download_music_tool(self, song_id: str, quality: str = "exhigh") -> dict:
+        """下载音乐工具"""
+        if not self._enabled:
+            return {"success": False, "message": "插件未启用"}
+        
+        try:
+            # 使用配置的默认音质或参数指定的音质
+            download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
+            download_result = self._api_tester.download_music_for_link(song_id, download_quality)
+            
+            if download_result.get("success"):
+                data = download_result.get("data", {})
+                file_path = data.get("file_path", "")
+                
+                # 提取文件名
+                filename = ""
+                if file_path:
+                    filename = file_path.split("/")[-1]
+                
+                result = {
+                    "success": True,
+                    "song_id": song_id,
+                    "quality": download_quality,
+                    "filename": filename,
+                    "file_path": file_path,
+                    "message": "下载完成"
+                }
+                
+                # 如果配置了openlist地址，添加下载链接
+                if self._openlist_url and filename:
+                    openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
+                    result["download_link"] = openlist_link
+                
+                return result
+            else:
+                return {
+                    "success": False,
+                    "message": download_result.get('message', '下载失败')
+                }
+        except Exception as e:
+            logger.error(f"下载音乐时发生异常: {e}", exc_info=True)
+            return {"success": False, "message": f"下载异常: {str(e)}"}
+
+    def stop_service(self):
+        """插件停止时注销工具和提示"""
+        try:
+            if hasattr(self, 'stop_mcp_decorators') and MCP_DEV_AVAILABLE:
+                # 停止MCP功能
+                self.stop_mcp_decorators()
+        except Exception as e:
+            logger.error(f"停止MCP服务失败: {str(e)}")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
@@ -929,15 +1097,6 @@ class NeteaseMusic(_PluginBase):
                 "message": f"连接异常: {str(e)}",
                 "error": str(e)
             }
-
-    def stop_service(self):
-        """
-        退出插件
-        """
-        logger.info("正在停止音乐插件服务")
-        # 清理会话数据
-        self._sessions.clear()
-        logger.info("插件服务已停止，会话数据已清理")
 
     def get_api(self) -> List[Dict[str, Any]]:
         """
