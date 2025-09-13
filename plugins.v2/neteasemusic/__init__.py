@@ -6,11 +6,34 @@ import time  # 添加time模块用于会话超时检查
 
 from .test_api import NeteaseMusicAPITester
 
-# 基础导入
-from app.core.event import eventmanager, Event
-from app.log import logger
-from app.plugins import _PluginBase
-from app.schemas.types import EventType, MessageChannel
+# 安全导入所有必需模块
+try:
+    from app.core.event import eventmanager, Event
+    from app.log import logger
+    from app.plugins import _PluginBase
+    from app.schemas.types import EventType, MessageChannel
+    MODULES_AVAILABLE = True
+except ImportError as e:
+    print(f"警告: 缺少必要的MoviePilot模块: {e}")
+    MODULES_AVAILABLE = False
+    
+    # 创建模拟类以避免导入错误
+    class Event:
+        pass
+    
+    class _PluginBase:
+        pass
+    
+    EventType = None
+    MessageChannel = None
+    
+    # 创建模拟logger
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # 创建模拟eventmanager装饰器
+    def eventmanager(func):
+        return func
 
 # 导入MCP插件助手（可选）
 try:
@@ -277,7 +300,7 @@ class NeteaseMusic(*BaseClasses):
             }
         ]
     )
-    def mcp_download_music(self, song_id: str, quality: str = "exhigh") -> dict:
+    def mcp_download_music(self, song_id: str, quality: Optional[str] = None) -> dict:
         """MCP音乐下载工具"""
         if not self._enabled:
             return {
@@ -291,7 +314,7 @@ class NeteaseMusic(*BaseClasses):
             }
         
         try:
-            # 使用配置的默认音质或参数指定的音质
+            # 使用传入的音质参数，如果没有传入则使用配置的默认音质
             download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
             result = self._api_tester.download_music_for_link(song_id, download_quality)
             
