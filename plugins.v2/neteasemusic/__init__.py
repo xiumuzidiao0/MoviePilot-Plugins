@@ -51,7 +51,7 @@ class NeteaseMusic(*BaseClasses):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
     # 插件版本
-    plugin_version = "1.26"
+    plugin_version = "1.27"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
@@ -277,7 +277,7 @@ class NeteaseMusic(*BaseClasses):
             }
         ]
     )
-    def mcp_download_music(self, song_id: str, quality: str = "exhigh") -> dict:
+    def mcp_download_music(self, song_id: str, quality: str = None) -> dict:
         """MCP音乐下载工具"""
         if not self._enabled:
             return {
@@ -291,8 +291,41 @@ class NeteaseMusic(*BaseClasses):
             }
         
         try:
-            # 使用配置的默认音质或参数指定的音质
-            download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
+            # 检查是否需要询问音质（与用户交互逻辑保持一致）
+            default_quality = self._default_quality or self.DEFAULT_QUALITY
+            
+            # 如果没有指定音质且默认音质为"ask"，或者没有指定音质且没有默认音质，则返回音质选择列表
+            if not quality and (default_quality == "ask" or not default_quality):
+                # 返回音质选择列表
+                quality_options = [
+                    {"code": "standard", "name": "标准音质", "desc": "128kbps MP3"},
+                    {"code": "exhigh", "name": "极高音质", "desc": "320kbps MP3"},
+                    {"code": "lossless", "name": "无损音质", "desc": "FLAC"},
+                    {"code": "hires", "name": "Hi-Res音质", "desc": "24bit/96kHz"},
+                    {"code": "sky", "name": "沉浸环绕声", "desc": "空间音频"},
+                    {"code": "jyeffect", "name": "高清环绕声", "desc": "环绕声效果"},
+                    {"code": "jymaster", "name": "超清母带", "desc": "母带音质"}
+                ]
+                
+                quality_list = []
+                for i, q in enumerate(quality_options, 1):
+                    quality_list.append(f"{i}. {q['name']} ({q['desc']})")
+                
+                response_text = "🎵 请选择下载音质:\n\n" + "\n".join(quality_list)
+                response_text += "\n\n请重新调用此工具并指定quality参数，例如：quality=\"exhigh\""
+                
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": response_text
+                        }
+                    ],
+                    "isError": False
+                }
+            
+            # 使用指定的音质或默认音质
+            download_quality = quality or default_quality
             result = self._api_tester.download_music_for_link(song_id, download_quality)
             
             if result.get("success"):
