@@ -312,6 +312,19 @@ class NeteaseMusic(*BaseClasses):
                 "isError": True
             }
         
+        # 验证音质参数
+        valid_qualities = ["standard", "exhigh", "lossless", "hires", "sky", "jyeffect", "jymaster"]
+        if quality not in valid_qualities:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"无效的音质参数: {quality}。支持的音质: {', '.join(valid_qualities)}"
+                    }
+                ],
+                "isError": True
+            }
+        
         try:
             # 使用配置的默认音质或参数指定的音质
             download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
@@ -324,8 +337,20 @@ class NeteaseMusic(*BaseClasses):
                 quality_name = data.get("quality_name", "未知音质")
                 file_size = data.get("file_size_formatted", "未知大小")
                 file_path = data.get("file_path", "")
+                file_type = data.get("file_type", "")
+                
+                # 验证音质与文件类型是否匹配
+                quality_mismatch = False
+                if download_quality == "lossless" and file_type.lower() not in ["flac", "ape", "wav"]:
+                    quality_mismatch = True
+                elif download_quality in ["hires", "jymaster"] and file_type.lower() not in ["flac", "ape", "wav", "dff", "dsf"]:
+                    quality_mismatch = True
                 
                 response_text = f"✅ 下载完成!\n\n歌曲: {song_name}\n艺术家: {artist}\n音质: {quality_name}\n文件大小: {file_size}"
+                
+                # 如果文件类型与请求的音质不匹配，添加警告信息
+                if quality_mismatch:
+                    response_text += f"\n⚠️ 警告: 请求的音质({download_quality})与实际文件类型({file_type})可能不匹配"
                 
                 # 如果配置了openlist地址，则添加链接信息
                 if self._openlist_url and file_path:
@@ -333,6 +358,10 @@ class NeteaseMusic(*BaseClasses):
                     filename = file_path.split("/")[-1]
                     openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
                     response_text += f"\n\n🔗 下载链接: {openlist_link}"
+                
+                # 添加文件类型信息
+                if file_type:
+                    response_text += f"\n📄 文件类型: {file_type}"
                 
                 return {
                     "content": [
@@ -345,6 +374,21 @@ class NeteaseMusic(*BaseClasses):
                 }
             else:
                 error_msg = result.get("message", "下载失败")
+                # 如果是音质不支持的错误，提供更详细的说明
+                if "不支持" in error_msg or "无法获取" in error_msg:
+                    quality_names = {
+                        "standard": "标准音质",
+                        "exhigh": "极高音质", 
+                        "lossless": "无损音质",
+                        "hires": "Hi-Res音质",
+                        "sky": "沉浸环绕声",
+                        "jyeffect": "高清环绕声",
+                        "jymaster": "超清母带"
+                    }
+                    quality_display = quality_names.get(download_quality, download_quality)
+                    error_msg += f"\n\n💡 提示: 请求的音质 '{quality_display}' 可能不适用于此歌曲。"
+                    error_msg += f"\n请尝试使用较低的音质，如 'exhigh' 或 'lossless'。"
+                
                 return {
                     "content": [
                         {
