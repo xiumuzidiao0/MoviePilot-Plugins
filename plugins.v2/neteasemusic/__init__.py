@@ -50,7 +50,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
     # 插件版本
-    plugin_version = "1.22"
+    plugin_version = "1.23"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
@@ -81,6 +81,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         初始化插件
         """
         logger.info("开始初始化音乐插件")
+        logger.debug(f"插件初始化配置: {config}")
         
         if config:
             self._enabled = config.get("enabled", False)
@@ -149,6 +150,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         """
         logger.info(f"设置插件启用状态: {enabled}")
         self._enabled = enabled
+        logger.debug(f"插件启用状态已更新: {self._enabled}")
         # 可以在这里添加其他启用/禁用时需要处理的逻辑
 
     # ==================== MCP工具和提示 ====================
@@ -173,18 +175,24 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
     )
     def search_music_tool(self, keyword: str, limit: int = 8) -> dict:
         """搜索音乐工具"""
+        logger.info(f"[MCP工具] 开始搜索音乐: keyword={keyword}, limit={limit}")
         if not self._enabled:
+            logger.warning("[MCP工具] 插件未启用")
             return {"success": False, "message": "插件未启用"}
         
         try:
             # 使用配置的搜索限制或默认值
             search_limit = limit or self._search_limit or self.DEFAULT_SEARCH_LIMIT
+            logger.debug(f"[MCP工具] 搜索参数: search_limit={search_limit}")
             # 确保API测试器已初始化
             if not hasattr(self, '_api_tester') or not self._api_tester:
+                logger.warning("[MCP工具] API测试器未初始化，正在重新初始化")
                 api_base_url = self._base_url or self.DEFAULT_BASE_URL
                 self._api_tester = NeteaseMusicAPITester(base_url=api_base_url)
+                logger.info(f"[MCP工具] API测试器重新初始化完成，基础URL: {api_base_url}")
             
             search_result = self._api_tester.search_music(keyword, limit=search_limit)
+            logger.debug(f"[MCP工具] 搜索结果: {search_result}")
             
             if search_result.get("success"):
                 songs = search_result.get("data", [])
@@ -200,6 +208,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                         "artists": artists
                     })
                 
+                logger.info(f"[MCP工具] 搜索完成，找到{len(formatted_songs)}首歌曲")
                 return {
                     "success": True,
                     "songs": formatted_songs,
@@ -207,12 +216,14 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     "message": f"搜索完成，找到{len(formatted_songs)}首歌曲"
                 }
             else:
+                error_msg = search_result.get('message', '搜索失败')
+                logger.warning(f"[MCP工具] 搜索失败: {error_msg}")
                 return {
                     "success": False,
-                    "message": search_result.get('message', '搜索失败')
+                    "message": error_msg
                 }
         except Exception as e:
-            logger.error(f"搜索音乐时发生异常: {e}", exc_info=True)
+            logger.error(f"[MCP工具] 搜索音乐时发生异常: {e}", exc_info=True)
             return {"success": False, "message": f"搜索异常: {str(e)}"}
 
     @mcp_tool(
@@ -236,18 +247,24 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
     )
     def download_music_tool(self, song_id: str, quality: str = "exhigh") -> dict:
         """下载音乐工具"""
+        logger.info(f"[MCP工具] 开始下载音乐: song_id={song_id}, quality={quality}")
         if not self._enabled:
+            logger.warning("[MCP工具] 插件未启用")
             return {"success": False, "message": "插件未启用"}
         
         try:
             # 使用配置的默认音质或参数指定的音质
             download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
+            logger.debug(f"[MCP工具] 下载参数: download_quality={download_quality}")
             # 确保API测试器已初始化
             if not hasattr(self, '_api_tester') or not self._api_tester:
+                logger.warning("[MCP工具] API测试器未初始化，正在重新初始化")
                 api_base_url = self._base_url or self.DEFAULT_BASE_URL
                 self._api_tester = NeteaseMusicAPITester(base_url=api_base_url)
+                logger.info(f"[MCP工具] API测试器重新初始化完成，基础URL: {api_base_url}")
                 
             download_result = self._api_tester.download_music_for_link(song_id, download_quality)
+            logger.debug(f"[MCP工具] 下载结果: {download_result}")
             
             if download_result.get("success"):
                 data = download_result.get("data", {})
@@ -271,25 +288,33 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 if self._openlist_url and filename:
                     openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
                     result["download_link"] = openlist_link
+                    logger.debug(f"[MCP工具] 添加OpenList链接: {openlist_link}")
                 
+                logger.info(f"[MCP工具] 下载完成: filename={filename}")
                 return result
             else:
+                error_msg = download_result.get('message', '下载失败')
+                logger.warning(f"[MCP工具] 下载失败: {error_msg}")
                 return {
                     "success": False,
-                    "message": download_result.get('message', '下载失败')
+                    "message": error_msg
                 }
         except Exception as e:
-            logger.error(f"下载音乐时发生异常: {e}", exc_info=True)
+            logger.error(f"[MCP工具] 下载音乐时发生异常: {e}", exc_info=True)
             return {"success": False, "message": f"下载异常: {str(e)}"}
 
     def stop_service(self):
         """插件停止时注销工具和提示"""
+        logger.info("正在停止插件服务")
         try:
             if hasattr(self, 'stop_mcp_decorators') and MCP_DEV_AVAILABLE:
                 # 停止MCP功能
+                logger.debug("正在停止MCP功能")
                 self.stop_mcp_decorators()
+                logger.info("MCP功能已停止")
         except Exception as e:
             logger.error(f"停止MCP服务失败: {str(e)}")
+        logger.info("插件服务已停止")
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
@@ -463,25 +488,26 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         :param userid: 用户ID
         :return: 会话数据，如果超时或不存在则返回None
         """
-        logger.debug(f"获取用户 {userid} 的会话数据")
+        logger.debug(f"[会话管理] 获取用户 {userid} 的会话数据")
         session = self._sessions.get(userid)
-        logger.debug(f"用户 {userid} 的原始会话数据: {session}")
+        logger.debug(f"[会话管理] 用户 {userid} 的原始会话数据: {session}")
         if not session:
-            logger.debug(f"用户 {userid} 没有会话数据")
+            logger.debug(f"[会话管理] 用户 {userid} 没有会话数据")
             return None
             
         # 检查会话是否超时
         last_active = session.get("last_active", 0)
         current_time = time.time()
         time_diff = current_time - last_active
-        logger.debug(f"用户 {userid} 会话时间差: {time_diff}秒，超时设置: {self.SESSION_TIMEOUT}秒")
+        logger.debug(f"[会话管理] 用户 {userid} 会话时间差: {time_diff}秒，超时设置: {self.SESSION_TIMEOUT}秒")
         if time_diff > self.SESSION_TIMEOUT:
             # 会话超时，清理并返回None
-            logger.debug(f"用户 {userid} 的会话已超时，清理会话数据")
+            logger.debug(f"[会话管理] 用户 {userid} 的会话已超时，清理会话数据")
             self._sessions.pop(userid, None)
+            logger.info(f"[会话管理] 用户 {userid} 的会话已超时并清理")
             return None
             
-        logger.debug(f"用户 {userid} 的会话数据有效")
+        logger.debug(f"[会话管理] 用户 {userid} 的会话数据有效")
         return session
 
     def _update_session(self, userid: str, session_data: Dict):
@@ -491,41 +517,45 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         :param userid: 用户ID
         :param session_data: 会话数据
         """
-        logger.debug(f"更新用户 {userid} 的会话数据: {session_data}")
+        logger.debug(f"[会话管理] 更新用户 {userid} 的会话数据: {session_data}")
         session_data["last_active"] = time.time()
         self._sessions[userid] = session_data
-        logger.debug(f"用户 {userid} 的会话数据已更新: {self._sessions[userid]}")
+        logger.debug(f"[会话管理] 用户 {userid} 的会话数据已更新: {self._sessions[userid]}")
 
     @eventmanager.register(EventType.PluginAction)
     def command_action(self, event: Event):
         """
         远程命令响应
         """
-        logger.info(f"收到PluginAction事件: {event}")
+        logger.info(f"[命令处理] 收到PluginAction事件: {event}")
         
         if not self._enabled:
-            logger.info("插件未启用")
+            logger.info("[命令处理] 插件未启用")
             return
             
         event_data = event.event_data
-        logger.info(f"事件数据: {event_data}")
+        logger.debug(f"[命令处理] 事件数据: {event_data}")
         
         # 获取动作类型
         action = event_data.get("action") if event_data else None
+        logger.debug(f"[命令处理] 动作类型: {action}")
         
         # 根据动作类型处理不同命令
         if action == "netease_music_download":
+            logger.info("[命令处理] 处理音乐下载命令")
             self._handle_music_download(event)
         elif action == "netease_music_select":
+            logger.info("[命令处理] 处理音乐选择命令")
             self._handle_music_select(event)
         else:
-            logger.info(f"未知的动作类型: {action}")
+            logger.warning(f"[命令处理] 未知的动作类型: {action}")
             return
 
     def _handle_music_download(self, event: Event):
         """
         处理音乐下载命令
         """
+        logger.info("[命令处理] 开始处理音乐下载命令")
         event_data = event.event_data
         # 从事件数据中获取用户ID，可能的字段名包括userid和user
         userid = event_data.get("userid") or event_data.get("user")
@@ -533,14 +563,15 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         source = event_data.get("source")
         
         if not userid:
-            logger.info("用户ID为空")
+            logger.warning("[命令处理] 用户ID为空")
             return
             
         # 获取命令参数（歌曲名/歌手名）
         command_args = event_data.get("arg_str", "").strip()
+        logger.info(f"[命令处理] 用户 {userid} 触发音乐下载命令，参数: {command_args}")
         if not command_args:
             # 如果没有参数，提示用户输入
-            logger.info(f"用户 {userid} 触发音乐下载命令，但未提供参数")
+            logger.info(f"[命令处理] 用户 {userid} 触发音乐下载命令，但未提供参数")
             try:
                 self.post_message(
                     channel=channel,
@@ -549,31 +580,31 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     text="请输入要搜索的歌曲名称或歌手，例如：/y 周杰伦",
                     userid=userid
                 )
-                logger.info(f"已向用户 {userid} 发送提示消息")
+                logger.info(f"[命令处理] 已向用户 {userid} 发送提示消息")
             except Exception as e:
-                logger.error(f"发送提示消息失败: {e}", exc_info=True)
+                logger.error(f"[命令处理] 发送提示消息失败: {e}", exc_info=True)
             return
         
-        logger.info(f"用户 {userid} 搜索音乐: {command_args}")
+        logger.info(f"[命令处理] 用户 {userid} 搜索音乐: {command_args}")
         
         # 直接执行搜索
         try:
             # 搜索歌曲
             search_limit = self._search_limit or self.DEFAULT_SEARCH_LIMIT
-            logger.debug(f"开始搜索歌曲: 关键词={command_args}, 限制数量={search_limit}")
+            logger.debug(f"[命令处理] 开始搜索歌曲: 关键词={command_args}, 限制数量={search_limit}")
             
             search_result = self._api_tester.search_music(command_args, limit=search_limit)
-            logger.debug(f"搜索完成，结果: success={search_result.get('success')}, "
+            logger.debug(f"[命令处理] 搜索完成，结果: success={search_result.get('success')}, "
                         f"歌曲数量={len(search_result.get('data', []))}")
             
             if not search_result.get("success"):
                 error_msg = search_result.get('message', '未知错误')
-                logger.warning(f"用户 {userid} 搜索失败: {error_msg}")
+                logger.warning(f"[命令处理] 用户 {userid} 搜索失败: {error_msg}")
                 response = f"❌ 搜索失败: {error_msg}"
             else:
                 songs = search_result.get("data", [])
                 if not songs:
-                    logger.info(f"用户 {userid} 搜索未找到结果: {command_args}")
+                    logger.info(f"[命令处理] 用户 {userid} 搜索未找到结果: {command_args}")
                     response = "❌ 未找到相关歌曲，请尝试其他关键词。"
                 else:
                     # 保存搜索结果到会话，包含分页信息
@@ -586,7 +617,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                         }
                     }
                     self._update_session(userid, session_data)
-                    logger.debug(f"用户 {userid} 搜索结果已保存到会话，时间戳: {session_data['data']['timestamp']}")
+                    logger.debug(f"[命令处理] 用户 {userid} 搜索结果已保存到会话，时间戳: {session_data['data']['timestamp']}")
                     
                     # 显示第一页结果
                     response = self._format_song_list_page(userid, songs, 0)
@@ -599,9 +630,9 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 text=response,
                 userid=userid
             )
-            logger.info(f"已向用户 {userid} 发送搜索结果")
+            logger.info(f"[命令处理] 已向用户 {userid} 发送搜索结果")
         except Exception as e:
-            logger.error(f"搜索音乐时发生错误: {e}", exc_info=True)
+            logger.error(f"[命令处理] 搜索音乐时发生错误: {e}", exc_info=True)
             try:
                 self.post_message(
                     channel=channel,
@@ -611,7 +642,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     userid=userid
                 )
             except Exception as e2:
-                logger.error(f"发送错误消息失败: {e2}", exc_info=True)
+                logger.error(f"[命令处理] 发送错误消息失败: {e2}", exc_info=True)
 
     def _format_song_list_page(self, userid: str, songs: List[Dict], page: int) -> str:
         """
@@ -622,6 +653,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         :param page: 页码（从0开始）
         :return: 格式化后的页面内容
         """
+        logger.debug(f"[页面格式化] 格式化用户 {userid} 的歌曲列表页面，页码: {page}")
         PAGE_SIZE = 8  # 每页显示8首歌曲
         total_songs = len(songs)
         total_pages = (total_songs + PAGE_SIZE - 1) // PAGE_SIZE  # 计算总页数
@@ -649,13 +681,14 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 response += "输入 /n n 查看下一页\n"
         
         response += "输入 /n 数字 选择歌曲下载，例如：/n 1"
-        
+        logger.debug(f"[页面格式化] 页面格式化完成，歌曲数量: {end_idx - start_idx}")
         return response
 
     def _handle_music_select(self, event: Event):
         """
         处理音乐选择命令
         """
+        logger.info("[命令处理] 开始处理音乐选择命令")
         event_data = event.event_data
         # 从事件数据中获取用户ID，可能的字段名包括userid和user
         userid = event_data.get("userid") or event_data.get("user")
@@ -663,14 +696,15 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         source = event_data.get("source")
         
         if not userid:
-            logger.info("用户ID为空")
+            logger.warning("[命令处理] 用户ID为空")
             return
             
         # 获取命令参数（数字或翻页指令）
         command_args = event_data.get("arg_str", "").strip()
+        logger.info(f"[命令处理] 用户 {userid} 触发音乐选择命令，参数: {command_args}")
         if not command_args:
             # 如果没有参数，提示用户输入
-            logger.info(f"用户 {userid} 触发音乐选择命令，但未提供参数")
+            logger.info(f"[命令处理] 用户 {userid} 触发音乐选择命令，但未提供参数")
             try:
                 self.post_message(
                     channel=channel,
@@ -679,17 +713,17 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     text="请输入要选择的歌曲序号，例如：/n 1",
                     userid=userid
                 )
-                logger.info(f"已向用户 {userid} 发送提示消息")
+                logger.info(f"[命令处理] 已向用户 {userid} 发送提示消息")
             except Exception as e:
-                logger.error(f"发送提示消息失败: {e}", exc_info=True)
+                logger.error(f"[命令处理] 发送提示消息失败: {e}", exc_info=True)
             return
         
-        logger.info(f"用户 {userid} 选择歌曲: {command_args}")
+        logger.info(f"[命令处理] 用户 {userid} 选择歌曲: {command_args}")
         
         # 检查用户是否有有效的搜索会话
         session = self._get_session(userid)
         if not session:
-            logger.info(f"用户 {userid} 没有有效的搜索会话")
+            logger.info(f"[命令处理] 用户 {userid} 没有有效的搜索会话")
             try:
                 self.post_message(
                     channel=channel,
@@ -698,9 +732,9 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     text="请先使用 /y 命令搜索歌曲，然后使用 /n 数字 来选择歌曲下载",
                     userid=userid
                 )
-                logger.info(f"已向用户 {userid} 发送提示消息")
+                logger.info(f"[命令处理] 已向用户 {userid} 发送提示消息")
             except Exception as e:
-                logger.error(f"发送提示消息失败: {e}", exc_info=True)
+                logger.error(f"[命令处理] 发送提示消息失败: {e}", exc_info=True)
             return
         
         # 检查会话是否在有效时间内（5分钟内）
@@ -708,7 +742,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         timestamp = data.get("timestamp", 0)
         current_time = time.time()
         if current_time - timestamp > self.SESSION_TIMEOUT:
-            logger.info(f"用户 {userid} 的搜索会话已超时")
+            logger.info(f"[命令处理] 用户 {userid} 的搜索会话已超时")
             try:
                 self.post_message(
                     channel=channel,
@@ -717,11 +751,11 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     text="搜索结果已过期，请重新使用 /y 命令搜索歌曲",
                     userid=userid
                 )
-                logger.info(f"已向用户 {userid} 发送提示消息")
+                logger.info(f"[命令处理] 已向用户 {userid} 发送提示消息")
                 # 清理会话
                 self._sessions.pop(userid, None)
             except Exception as e:
-                logger.error(f"发送提示消息失败: {e}", exc_info=True)
+                logger.error(f"[命令处理] 发送提示消息失败: {e}", exc_info=True)
             return
         
         # 检查会话状态
@@ -730,17 +764,20 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         current_page = data.get("current_page", 0)
         PAGE_SIZE = 8
         
+        logger.debug(f"[命令处理] 用户 {userid} 会话状态: {state}")
         # 根据会话状态处理不同情况
         if state == "waiting_for_quality_choice":
             # 处理音质选择
             selected_song = data.get("selected_song")
             if selected_song:
+                logger.info(f"[命令处理] 处理用户 {userid} 的音质选择")
                 return self._handle_quality_selection(event, selected_song)
         elif state == "waiting_for_song_choice":
             # 处理歌曲选择或翻页
+            logger.debug(f"[命令处理] 用户 {userid} 处于歌曲选择状态")
             pass
         else:
-            logger.info(f"用户 {userid} 会话状态无效: {state}")
+            logger.warning(f"[命令处理] 用户 {userid} 会话状态无效: {state}")
             try:
                 self.post_message(
                     channel=channel,
@@ -749,15 +786,16 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     text="会话状态异常，请重新使用 /y 命令搜索歌曲",
                     userid=userid
                 )
-                logger.info(f"已向用户 {userid} 发送提示消息")
+                logger.info(f"[命令处理] 已向用户 {userid} 发送提示消息")
                 # 清理会话
                 self._sessions.pop(userid, None)
             except Exception as e:
-                logger.error(f"发送提示消息失败: {e}", exc_info=True)
+                logger.error(f"[命令处理] 发送提示消息失败: {e}", exc_info=True)
             return
         
         # 处理翻页指令
         if command_args.lower() == 'n':  # 下一页
+            logger.info(f"[命令处理] 用户 {userid} 请求下一页")
             total_pages = (len(songs) + PAGE_SIZE - 1) // PAGE_SIZE
             if current_page < total_pages - 1:
                 # 更新会话中的页码
@@ -773,7 +811,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     text=response,
                     userid=userid
                 )
-                logger.info(f"已向用户 {userid} 发送下一页搜索结果")
+                logger.info(f"[命令处理] 已向用户 {userid} 发送下一页搜索结果")
             else:
                 response = "❌ 已经是最后一页了"
                 self.post_message(
@@ -785,6 +823,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 )
             return
         elif command_args.lower() == 'p':  # 上一页
+            logger.info(f"[命令处理] 用户 {userid} 请求上一页")
             if current_page > 0:
                 # 更新会话中的页码
                 data["current_page"] = current_page - 1
@@ -799,7 +838,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     text=response,
                     userid=userid
                 )
-                logger.info(f"已向用户 {userid} 发送上一页搜索结果")
+                logger.info(f"[命令处理] 已向用户 {userid} 发送上一页搜索结果")
             else:
                 response = "❌ 已经是第一页了"
                 self.post_message(
@@ -814,14 +853,14 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         # 处理数字选择
         try:
             song_index = int(command_args) - 1
-            logger.debug(f"用户 {userid} 选择歌曲序号: {command_args} (索引: {song_index})")
+            logger.debug(f"[命令处理] 用户 {userid} 选择歌曲序号: {command_args} (索引: {song_index})")
             
             if 0 <= song_index < len(songs):
                 selected_song = songs[song_index]
                 song_name = selected_song.get('name', '')
                 song_artists = selected_song.get('artists', '') or selected_song.get('ar_name', '')
                 
-                logger.info(f"用户 {userid} 选择歌曲: {song_name} - {song_artists}")
+                logger.info(f"[命令处理] 用户 {userid} 选择歌曲: {song_name} - {song_artists}")
                 
                 # 检查是否需要询问音质
                 default_quality = self._default_quality or self.DEFAULT_QUALITY
@@ -839,12 +878,13 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                         text=response,
                         userid=userid
                     )
-                    logger.info(f"已向用户 {userid} 发送音质选择列表")
+                    logger.info(f"[命令处理] 已向用户 {userid} 发送音质选择列表")
                 else:
                     # 使用默认音质下载
+                    logger.info(f"[命令处理] 使用默认音质 {default_quality} 下载歌曲")
                     self._download_song_with_quality(event, selected_song, default_quality)
             else:
-                logger.warning(f"用户 {userid} 选择的歌曲序号超出范围: {song_index} (有效范围: 0-{len(songs)-1})")
+                logger.warning(f"[命令处理] 用户 {userid} 选择的歌曲序号超出范围: {song_index} (有效范围: 0-{len(songs)-1})")
                 response = f"❌ 序号超出范围，请输入 1-{len(songs)} 之间的数字"
                 self.post_message(
                     channel=channel,
@@ -854,7 +894,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     userid=userid
                 )
         except ValueError:
-            logger.warning(f"用户 {userid} 输入的歌曲序号无效: {command_args}")
+            logger.warning(f"[命令处理] 用户 {userid} 输入的歌曲序号无效: {command_args}")
             response = "❌ 请输入有效的数字序号或翻页指令 (/n n 下一页, /n p 上一页)"
             self.post_message(
                 channel=channel,
@@ -871,12 +911,14 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         :param event: 事件对象
         :param selected_song: 选中的歌曲
         """
+        logger.info("[命令处理] 开始处理音质选择")
         event_data = event.event_data
         userid = event_data.get("userid") or event_data.get("user")
         channel = event_data.get("channel")
         source = event_data.get("source")
         command_args = event_data.get("arg_str", "").strip()
         
+        logger.info(f"[命令处理] 用户 {userid} 选择音质，参数: {command_args}")
         try:
             quality_index = int(command_args) - 1
             quality_options = [
@@ -894,15 +936,16 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 quality_code = selected_quality["code"]
                 quality_name = selected_quality["name"]
                 
-                logger.info(f"用户 {userid} 选择音质: {quality_name}")
+                logger.info(f"[命令处理] 用户 {userid} 选择音质: {quality_name}")
                 
                 # 重置会话状态
                 self._update_session(userid, {"state": "idle"})
                 
                 # 下载歌曲
+                logger.info(f"[命令处理] 开始下载歌曲，音质: {quality_code}")
                 self._download_song_with_quality(event, selected_song, quality_code)
             else:
-                logger.warning(f"用户 {userid} 选择的音质序号超出范围: {quality_index}")
+                logger.warning(f"[命令处理] 用户 {userid} 选择的音质序号超出范围: {quality_index}")
                 response = f"❌ 序号超出范围，请输入 1-{len(quality_options)} 之间的数字"
                 self.post_message(
                     channel=channel,
@@ -912,7 +955,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     userid=userid
                 )
         except ValueError:
-            logger.warning(f"用户 {userid} 输入的音质序号无效: {command_args}")
+            logger.warning(f"[命令处理] 用户 {userid} 输入的音质序号无效: {command_args}")
             response = "❌ 请输入有效的数字序号选择音质"
             self.post_message(
                 channel=channel,
@@ -928,6 +971,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         
         :return: 格式化后的音质列表
         """
+        logger.debug("[页面格式化] 格式化音质列表")
         quality_options = [
             {"code": "standard", "name": "标准音质", "desc": "128kbps MP3"},
             {"code": "exhigh", "name": "极高音质", "desc": "320kbps MP3"},
@@ -943,6 +987,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
             response += f"{i}. {quality['name']} ({quality['desc']})\n"
         
         response += "\n请输入 /n 数字 选择音质，例如：/n 2"
+        logger.debug(f"[页面格式化] 音质列表格式化完成，选项数量: {len(quality_options)}")
         return response
 
     def _download_song_with_quality(self, event: Event, selected_song: Dict, quality_code: str):
@@ -953,6 +998,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         :param selected_song: 选中的歌曲
         :param quality_code: 音质代码
         """
+        logger.info(f"[下载处理] 开始下载歌曲，音质代码: {quality_code}")
         event_data = event.event_data
         userid = event_data.get("userid") or event_data.get("user")
         channel = event_data.get("channel")
@@ -977,21 +1023,21 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         song_id = str(selected_song.get('id', ''))
         artist = selected_song.get('artists', '') or selected_song.get('ar_name', '')
         
-        logger.info(f"用户 {userid} 准备下载歌曲: {song_name} - {artist} ({quality_name})")
+        logger.info(f"[下载处理] 用户 {userid} 准备下载歌曲: {song_name} - {artist} ({quality_name})")
         
         # 重置会话状态
         self._update_session(userid, {"state": "idle"})
-        logger.debug(f"用户 {userid} 会话状态重置为: idle")
+        logger.debug(f"[下载处理] 用户 {userid} 会话状态重置为: idle")
         
         # 执行下载
         response = f"📥 开始下载: {song_name} - {artist} ({quality_name})\n请稍候..."
-        logger.debug(f"开始下载歌曲 {song_id}，音质: {quality_code}")
+        logger.debug(f"[下载处理] 开始下载歌曲 {song_id}，音质: {quality_code}")
         
         try:
             download_result = self._api_tester.download_music_for_link(song_id, quality_code)
-            logger.debug(f"下载完成，结果: success={download_result.get('success')}")
+            logger.debug(f"[下载处理] 下载完成，结果: success={download_result.get('success')}")
         except Exception as e:
-            logger.error(f"下载歌曲时发生异常: {e}", exc_info=True)
+            logger.error(f"[下载处理] 下载歌曲时发生异常: {e}", exc_info=True)
             self.post_message(
                 channel=channel,
                 source=source,
@@ -1003,7 +1049,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         
         if download_result.get("success"):
             response += "\n✅ 下载完成!"
-            logger.info(f"用户 {userid} 下载完成: {song_name} - {artist} ({quality_name})")
+            logger.info(f"[下载处理] 用户 {userid} 下载完成: {song_name} - {artist} ({quality_name})")
             
             # 如果配置了openlist地址，则添加链接信息
             if self._openlist_url:
@@ -1017,15 +1063,17 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                     filename = file_path.split("/")[-1]
                     openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
                     response += f"\n🔗 下载链接: {openlist_link}"
+                    logger.debug(f"[下载处理] 添加OpenList链接: {openlist_link}")
                 else:
                     # 如果没有文件路径信息，使用原来的处理方式
                     filename = f"{song_name} - {artist}".replace("/", "_").replace("\\", "_").replace(":", "_")
                     openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
                     response += f"\n🔗 下载链接: {openlist_link}"
+                    logger.debug(f"[下载处理] 添加默认OpenList链接: {openlist_link}")
         else:
             error_msg = download_result.get('message', '未知错误')
             response += f"\n❌ 下载失败: {error_msg}"
-            logger.warning(f"用户 {userid} 下载失败: {error_msg}")
+            logger.warning(f"[下载处理] 用户 {userid} 下载失败: {error_msg}")
         
         # 发送结果
         self.post_message(
@@ -1035,17 +1083,17 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
             text=response,
             userid=userid
         )
-        logger.info(f"已向用户 {userid} 发送下载结果")
+        logger.info(f"[下载处理] 已向用户 {userid} 发送下载结果")
 
     @eventmanager.register(EventType.UserMessage)
     def handle_user_message(self, event: Event):
         """
         监听用户消息事件
         """
-        logger.debug(f"收到用户消息事件: {event}")
+        logger.debug(f"[消息处理] 收到用户消息事件: {event}")
         
         if not self._enabled:
-            logger.debug("插件未启用，忽略消息")
+            logger.debug("[消息处理] 插件未启用，忽略消息")
             return
             
         # 获取消息内容
@@ -1054,13 +1102,13 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         channel = event.event_data.get("channel")
         
         if not text or not userid:
-            logger.warning("消息缺少必要信息: text或userid为空")
+            logger.warning("[消息处理] 消息缺少必要信息: text或userid为空")
             return
             
-        logger.info(f"收到用户消息: {text} (用户: {userid})")
+        logger.info(f"[消息处理] 收到用户消息: {text} (用户: {userid})")
         
         # 现在使用专门的命令处理，不再处理普通用户消息
-        logger.debug(f"用户 {userid} 发送普通消息，交由系统处理")
+        logger.debug(f"[消息处理] 用户 {userid} 发送普通消息，交由系统处理")
 
     def test_connection(self, url: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -1072,36 +1120,36 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         Returns:
             连接测试结果
         """
-        logger.info("开始测试API连接")
+        logger.info("[连接测试] 开始测试API连接")
         
         try:
             # 使用提供的URL或当前配置的URL
             api_url = url or self._base_url or self.DEFAULT_BASE_URL
-            logger.debug(f"测试API地址: {api_url}")
+            logger.debug(f"[连接测试] 测试API地址: {api_url}")
             
             # 测试健康检查接口
             test_url = f"{api_url.rstrip('/')}/health"
-            logger.debug(f"健康检查URL: {test_url}")
+            logger.debug(f"[连接测试] 健康检查URL: {test_url}")
             
             response = self._api_tester.session.get(test_url, timeout=10)
-            logger.debug(f"健康检查响应: status_code={response.status_code}")
+            logger.debug(f"[连接测试] 健康检查响应: status_code={response.status_code}")
             
             if response.status_code == 200:
-                logger.info(f"API连接测试成功: {api_url}")
+                logger.info(f"[连接测试] API连接测试成功: {api_url}")
                 return {
                     "success": True,
                     "message": f"成功连接到API服务器: {api_url}",
                     "status_code": response.status_code
                 }
             else:
-                logger.warning(f"API连接测试失败: status_code={response.status_code}")
+                logger.warning(f"[连接测试] API连接测试失败: status_code={response.status_code}")
                 return {
                     "success": False,
                     "message": f"连接失败，状态码: {response.status_code}",
                     "status_code": response.status_code
                 }
         except Exception as e:
-            logger.error(f"API连接测试异常: {e}", exc_info=True)
+            logger.error(f"[连接测试] API连接测试异常: {e}", exc_info=True)
             return {
                 "success": False,
                 "message": f"连接异常: {str(e)}",
@@ -1115,8 +1163,8 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         Returns:
             API接口列表
         """
-        logger.debug("获取插件API接口列表")
-        return [
+        logger.debug("[API管理] 获取插件API接口列表")
+        api_list = [
             {
                 "path": "/test_connection",
                 "endpoint": self.test_connection,
@@ -1126,6 +1174,8 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 "description": "测试配置的API地址是否可以正常连接"
             }
         ]
+        logger.debug(f"[API管理] API接口列表: {api_list}")
+        return api_list
 
     def get_page(self) -> List[dict]:
         """
@@ -1134,8 +1184,8 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         Returns:
             页面配置列表
         """
-        logger.debug("生成插件详情页面配置")
-        return [
+        logger.debug("[页面管理] 生成插件详情页面配置")
+        page_config = [
             {
                 'component': 'VContainer',
                 'props': {
@@ -1297,6 +1347,8 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 ]
             }
         ]
+        logger.debug(f"[页面管理] 页面配置生成完成")
+        return page_config
 
     def get_dashboard(self, **kwargs) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], str]]:
         """
@@ -1305,7 +1357,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         Returns:
             仪表板组件配置元组(组件配置, 数据, 样式)
         """
-        logger.debug("生成仪表板组件配置")
+        logger.debug("[仪表板] 生成仪表板组件配置")
         component = {
             'component': 'VCard',
             'content': [
@@ -1354,6 +1406,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 }
             ]
         }
+        logger.debug("[仪表板] 仪表板组件配置生成完成")
         return component, {}, 'row span-4'
 
     def get_state(self) -> bool:
@@ -1363,6 +1416,7 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         Returns:
             bool: 插件启用状态
         """
+        logger.debug(f"[状态管理] 获取插件状态: {self._enabled}")
         return self._enabled
 
     @staticmethod
@@ -1373,7 +1427,8 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
         Returns:
             List[Dict[str, Any]]: 命令列表
         """
-        return [
+        logger.debug("[命令管理] 注册插件命令")
+        command_list = [
             {
                 "cmd": "/y",
                 "event": EventType.PluginAction,
@@ -1393,3 +1448,5 @@ class NeteaseMusic(_PluginBase, MCPDecoratorMixin):
                 }
             }
         ]
+        logger.debug(f"[命令管理] 命令列表: {command_list}")
+        return command_list
