@@ -777,6 +777,9 @@ class NeteaseMusic(*BaseClasses):
             logger.debug(f"搜索完成，结果: success={search_result.get('success')}, "
                         f"歌曲数量={len(search_result.get('data', []))}")
             
+            song_list_text = ""
+            first_song_pic_url = None
+            
             if not search_result.get("success"):
                 error_msg = search_result.get('message', '未知错误')
                 logger.warning(f"用户 {userid} 搜索失败: {error_msg}")
@@ -801,14 +804,20 @@ class NeteaseMusic(*BaseClasses):
                     
                     # 显示第一页结果
                     response = self._format_song_list_page(userid, songs, 0)
+                    
+                    # 准备通知格式的文本和图片
+                    song_list_text = "\n".join([f"{i+1}. {song.get('name', '')}" for i, song in enumerate(songs[:8])])
+                    if songs:
+                        first_song_pic_url = songs[0].get('picUrl', '')
         
-            # 发送结果
+            # 发送结果 - 修改通知格式
             self.post_message(
                 channel=channel,
                 source=source,
                 title="🎵 音乐搜索结果",
-                text=response,
-                userid=userid
+                text=song_list_text if song_list_text else response,
+                userid=userid,
+                image=first_song_pic_url
             )
             logger.info(f"已向用户 {userid} 发送搜索结果")
         except Exception as e:
