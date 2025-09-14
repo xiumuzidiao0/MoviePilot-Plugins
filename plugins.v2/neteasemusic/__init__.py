@@ -851,7 +851,7 @@ class NeteaseMusic(*BaseClasses):
             artists = song.get('artists', '') or song.get('ar_name', '')
             pic_url = song.get('picUrl', '') or song.get('album_picUrl', '')
             
-            response += f"{i + 1}. {name} - {artists}\n\n poster_path=\'{pic_url}\'\n\n"
+            response += f"{i + 1}. {name} - {artists}\n\n backdrop_path=\'{pic_url}\'\n\n"
         
         response += "输入 /n 数字 选择歌曲下载，例如：/n 1"
         
