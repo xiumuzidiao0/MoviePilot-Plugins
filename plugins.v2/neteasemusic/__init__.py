@@ -74,7 +74,7 @@ class NeteaseMusic(*BaseClasses):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png"
     # 插件版本
-    plugin_version = "1.28"
+    plugin_version = "1.10"
     # 插件作者
     plugin_author = "xiumuzidiao0"
     # 作者主页
@@ -842,7 +842,7 @@ class NeteaseMusic(*BaseClasses):
         end_idx = min(start_idx + PAGE_SIZE, total_songs)
         
         # 构造歌曲列表回复
-        response = f"🔍 搜索到 {total_songs} 首歌曲 (第 {page + 1}/{total_pages} 页):\n\n"
+        response = f"🔍 搜索到 {total_songs} 首歌曲 (第 {page + 1}/{total_pages} 页):\n"
         
         # 显示当前页的歌曲
         for i in range(start_idx, end_idx):
@@ -851,7 +851,17 @@ class NeteaseMusic(*BaseClasses):
             artists = song.get('artists', '') or song.get('ar_name', '')
             pic_url = song.get('picUrl', '') or song.get('album_picUrl', '')
             
-            response += f"{i + 1}. {name} - {artists}\n\n backdrop_path=\'{pic_url}\'\n\n"
+            response += f"{i + 1}. {name} - {artists}\n"
+            if pic_url:
+                response += f"   🖼️ 封面: {pic_url}\n"
+        
+        # 添加翻页提示
+        if total_pages > 1:
+            response += "\n"
+            if page > 0:
+                response += "输入 /n p 查看上一页\n"
+            if page < total_pages - 1:
+                response += "输入 /n n 查看下一页\n"
         
         response += "输入 /n 数字 选择歌曲下载，例如：/n 1"
         
