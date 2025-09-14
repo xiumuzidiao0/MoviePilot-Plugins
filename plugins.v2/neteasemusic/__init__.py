@@ -491,6 +491,22 @@ class NeteaseMusic(*BaseClasses):
         for quality in quality_options:
             logger.info(f"  - {quality['name']} ({quality['code']}): {quality['desc']}")
 
+    def __send_notify(self, title: str, text: str, image: Optional[str] = None, userid: Optional[str] = None, channel = None, source = None):
+        """
+        发送通知，格式与插件自动更新保持一致
+        """
+        try:
+            self.post_message(
+                title=title,
+                text=text,
+                image=image,
+                userid=userid,
+                channel=channel,
+                source=source
+            )
+        except Exception as e:
+            logger.error(f"发送通知失败: {e}", exc_info=True)
+
     def set_enabled(self, enabled: bool):
         """
         设置插件启用状态
@@ -753,12 +769,13 @@ class NeteaseMusic(*BaseClasses):
             # 如果没有参数，提示用户输入
             logger.info(f"用户 {userid} 触发音乐下载命令，但未提供参数")
             try:
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 音乐下载",
                     text="请输入要搜索的歌曲名称或歌手，例如：/y 周杰伦",
-                    userid=userid
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
                 logger.info(f"已向用户 {userid} 发送提示消息")
             except Exception as e:
@@ -777,18 +794,29 @@ class NeteaseMusic(*BaseClasses):
             logger.debug(f"搜索完成，结果: success={search_result.get('success')}, "
                         f"歌曲数量={len(search_result.get('data', []))}")
             
-            song_list_text = ""
-            first_song_pic_url = None
-            
             if not search_result.get("success"):
                 error_msg = search_result.get('message', '未知错误')
                 logger.warning(f"用户 {userid} 搜索失败: {error_msg}")
-                response = f"❌ 搜索失败: {error_msg}"
+                self.__send_notify(
+                    title="🎵 音乐搜索结果",
+                    text=f"❌ 搜索失败: {error_msg}",
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
+                )
             else:
                 songs = search_result.get("data", [])
                 if not songs:
                     logger.info(f"用户 {userid} 搜索未找到结果: {command_args}")
-                    response = "❌ 未找到相关歌曲，请尝试其他关键词。"
+                    self.__send_notify(
+                        title="🎵 音乐搜索结果",
+                        text="❌ 未找到相关歌曲，请尝试其他关键词。",
+                        image=self.plugin_icon,
+                        userid=userid,
+                        channel=channel,
+                        source=source
+                    )
                 else:
                     # 保存搜索结果到会话，包含分页信息
                     session_data = {
@@ -804,31 +832,33 @@ class NeteaseMusic(*BaseClasses):
                     
                     # 显示第一页结果
                     response = self._format_song_list_page(userid, songs, 0)
+                    # 使用第一首歌的封面作为图标，如果没有则使用插件图标
+                    first_song = songs[0] if songs else None
+                    image_url = None
+                    if first_song:
+                        image_url = first_song.get('picUrl') or first_song.get('album_picUrl') or self.plugin_icon
+                    else:
+                        image_url = self.plugin_icon
                     
-                    # 准备通知格式的文本和图片
-                    song_list_text = "\n".join([f"{i+1}. {song.get('name', '')}" for i, song in enumerate(songs[:8])])
-                    if songs:
-                        first_song_pic_url = songs[0].get('picUrl', '')
-        
-            # 发送结果 - 修改通知格式
-            self.post_message(
-                channel=channel,
-                source=source,
-                title="🎵 音乐搜索结果",
-                text=song_list_text if song_list_text else response,
-                userid=userid,
-                image=first_song_pic_url
-            )
+                    self.__send_notify(
+                        title=f"🎵 音乐搜索结果 (第 1 页)",
+                        text=response,
+                        image=image_url,
+                        userid=userid,
+                        channel=channel,
+                        source=source
+                    )
             logger.info(f"已向用户 {userid} 发送搜索结果")
         except Exception as e:
             logger.error(f"搜索音乐时发生错误: {e}", exc_info=True)
             try:
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 音乐下载",
                     text="❌ 搜索时发生错误，请稍后重试",
-                    userid=userid
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
             except Exception as e2:
                 logger.error(f"发送错误消息失败: {e2}", exc_info=True)
@@ -851,22 +881,19 @@ class NeteaseMusic(*BaseClasses):
         end_idx = min(start_idx + PAGE_SIZE, total_songs)
         
         # 构造歌曲列表回复
-        response = f"🔍 搜索到 {total_songs} 首歌曲 (第 {page + 1}/{total_pages} 页):\n"
+        response = ""
         
         # 显示当前页的歌曲
         for i in range(start_idx, end_idx):
             song = songs[i]
             name = song.get('name', '')
             artists = song.get('artists', '') or song.get('ar_name', '')
-            pic_url = song.get('picUrl', '') or song.get('album_picUrl', '')
             
             response += f"{i + 1}. {name} - {artists}\n"
-            if pic_url:
-                response += f"   🖼️ 封面: {pic_url}\n"
         
         # 添加翻页提示
         if total_pages > 1:
-            response += "\n"
+            response += f"\n第 {page + 1}/{total_pages} 页\n"
             if page > 0:
                 response += "输入 /n p 查看上一页\n"
             if page < total_pages - 1:
@@ -896,12 +923,13 @@ class NeteaseMusic(*BaseClasses):
             # 如果没有参数，提示用户输入
             logger.info(f"用户 {userid} 触发音乐选择命令，但未提供参数")
             try:
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 歌曲选择",
                     text="请输入要选择的歌曲序号，例如：/n 1",
-                    userid=userid
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
                 logger.info(f"已向用户 {userid} 发送提示消息")
             except Exception as e:
@@ -915,12 +943,13 @@ class NeteaseMusic(*BaseClasses):
         if not session:
             logger.info(f"用户 {userid} 没有有效的搜索会话")
             try:
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 歌曲选择",
                     text="请先使用 /y 命令搜索歌曲，然后使用 /n 数字 来选择歌曲下载",
-                    userid=userid
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
                 logger.info(f"已向用户 {userid} 发送提示消息")
             except Exception as e:
@@ -934,12 +963,13 @@ class NeteaseMusic(*BaseClasses):
         if current_time - timestamp > self.SESSION_TIMEOUT:
             logger.info(f"用户 {userid} 的搜索会话已超时")
             try:
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 歌曲选择",
                     text="搜索结果已过期，请重新使用 /y 命令搜索歌曲",
-                    userid=userid
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
                 logger.info(f"已向用户 {userid} 发送提示消息")
                 # 清理会话
@@ -966,12 +996,13 @@ class NeteaseMusic(*BaseClasses):
         else:
             logger.info(f"用户 {userid} 会话状态无效: {state}")
             try:
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 歌曲选择",
                     text="会话状态异常，请重新使用 /y 命令搜索歌曲",
-                    userid=userid
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
                 logger.info(f"已向用户 {userid} 发送提示消息")
                 # 清理会话
@@ -990,22 +1021,33 @@ class NeteaseMusic(*BaseClasses):
                 
                 # 显示下一页
                 response = self._format_song_list_page(userid, songs, current_page + 1)
-                self.post_message(
-                    channel=channel,
-                    source=source,
-                    title="🎵 音乐搜索结果",
+                # 使用当前页第一首歌的封面作为图标
+                start_idx = (current_page + 1) * PAGE_SIZE
+                current_song = songs[start_idx] if start_idx < len(songs) else None
+                image_url = None
+                if current_song:
+                    image_url = current_song.get('picUrl') or current_song.get('album_picUrl') or self.plugin_icon
+                else:
+                    image_url = self.plugin_icon
+                
+                self.__send_notify(
+                    title=f"🎵 音乐搜索结果 (第 {current_page + 2} 页)",
                     text=response,
-                    userid=userid
+                    image=image_url,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
                 logger.info(f"已向用户 {userid} 发送下一页搜索结果")
             else:
                 response = "❌ 已经是最后一页了"
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 歌曲选择",
                     text=response,
-                    userid=userid
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
             return
         elif command_args.lower() == 'p':  # 上一页
@@ -1016,22 +1058,33 @@ class NeteaseMusic(*BaseClasses):
                 
                 # 显示上一页
                 response = self._format_song_list_page(userid, songs, current_page - 1)
-                self.post_message(
-                    channel=channel,
-                    source=source,
-                    title="🎵 音乐搜索结果",
+                # 使用当前页第一首歌的封面作为图标
+                start_idx = (current_page - 1) * PAGE_SIZE
+                current_song = songs[start_idx] if start_idx < len(songs) else None
+                image_url = None
+                if current_song:
+                    image_url = current_song.get('picUrl') or current_song.get('album_picUrl') or self.plugin_icon
+                else:
+                    image_url = self.plugin_icon
+                
+                self.__send_notify(
+                    title=f"🎵 音乐搜索结果 (第 {current_page} 页)",
                     text=response,
-                    userid=userid
+                    image=image_url,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
                 logger.info(f"已向用户 {userid} 发送上一页搜索结果")
             else:
                 response = "❌ 已经是第一页了"
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 歌曲选择",
                     text=response,
-                    userid=userid
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
             return
         
@@ -1056,12 +1109,15 @@ class NeteaseMusic(*BaseClasses):
                     
                     # 显示音质选择列表
                     response = self._format_quality_list()
-                    self.post_message(
-                        channel=channel,
-                        source=source,
+                    # 使用选中歌曲的封面作为图标
+                    image_url = selected_song.get('picUrl') or selected_song.get('album_picUrl') or self.plugin_icon
+                    self.__send_notify(
                         title="🎵 选择音质",
                         text=response,
-                        userid=userid
+                        image=image_url,
+                        userid=userid,
+                        channel=channel,
+                        source=source
                     )
                     logger.info(f"已向用户 {userid} 发送音质选择列表")
                 else:
@@ -1070,22 +1126,24 @@ class NeteaseMusic(*BaseClasses):
             else:
                 logger.warning(f"用户 {userid} 选择的歌曲序号超出范围: {song_index} (有效范围: 0-{len(songs)-1})")
                 response = f"❌ 序号超出范围，请输入 1-{len(songs)} 之间的数字"
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 歌曲选择",
                     text=response,
-                    userid=userid
+                    image=self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
         except ValueError:
             logger.warning(f"用户 {userid} 输入的歌曲序号无效: {command_args}")
             response = "❌ 请输入有效的数字序号或翻页指令 (/n n 下一页, /n p 上一页)"
-            self.post_message(
+            self.__send_notify(
+                title="🎵 歌曲选择",
+                text=response,
+                image=self.plugin_icon,
+                userid=userid,
                 channel=channel,
-                    source=source,
-                    title="🎵 歌曲选择",
-                    text=response,
-                    userid=userid
+                source=source
             )
 
     def _handle_quality_selection(self, event: Event, selected_song: Dict):
@@ -1128,22 +1186,24 @@ class NeteaseMusic(*BaseClasses):
             else:
                 logger.warning(f"用户 {userid} 选择的音质序号超出范围: {quality_index}")
                 response = f"❌ 序号超出范围，请输入 1-{len(quality_options)} 之间的数字"
-                self.post_message(
-                    channel=channel,
-                    source=source,
+                self.__send_notify(
                     title="🎵 音质选择",
                     text=response,
-                    userid=userid
+                    image=selected_song.get('picUrl') or selected_song.get('album_picUrl') or self.plugin_icon,
+                    userid=userid,
+                    channel=channel,
+                    source=source
                 )
         except ValueError:
             logger.warning(f"用户 {userid} 输入的音质序号无效: {command_args}")
             response = "❌ 请输入有效的数字序号选择音质"
-            self.post_message(
-                channel=channel,
-                source=source,
+            self.__send_notify(
                 title="🎵 音质选择",
                 text=response,
-                userid=userid
+                image=selected_song.get('picUrl') or selected_song.get('album_picUrl') or self.plugin_icon,
+                userid=userid,
+                channel=channel,
+                source=source
             )
 
     def _format_quality_list(self) -> str:
@@ -1216,12 +1276,13 @@ class NeteaseMusic(*BaseClasses):
             logger.debug(f"下载完成，结果: success={download_result.get('success')}")
         except Exception as e:
             logger.error(f"下载歌曲时发生异常: {e}", exc_info=True)
-            self.post_message(
-                channel=channel,
-                source=source,
+            self.__send_notify(
                 title="🎵 音乐下载",
                 text="❌ 下载失败: 网络异常，请稍后重试",
-                userid=userid
+                image=selected_song.get('picUrl') or selected_song.get('album_picUrl') or self.plugin_icon,
+                userid=userid,
+                channel=channel,
+                source=source
             )
             return
         
@@ -1252,12 +1313,13 @@ class NeteaseMusic(*BaseClasses):
             logger.warning(f"用户 {userid} 下载失败: {error_msg}")
         
         # 发送结果
-        self.post_message(
-            channel=channel,
-            source=source,
+        self.__send_notify(
             title="🎵 音乐下载完成",
             text=response,
-            userid=userid
+            image=selected_song.get('picUrl') or selected_song.get('album_picUrl') or self.plugin_icon,
+            userid=userid,
+            channel=channel,
+            source=source
         )
         logger.info(f"已向用户 {userid} 发送下载结果")
 
