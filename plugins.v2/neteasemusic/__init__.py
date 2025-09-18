@@ -733,61 +733,6 @@ class NeteaseMusic(*BaseClasses):
             logger.info(f"未知的动作类型: {action}")
             return
 
-    def _send_song_list_as_wechat_articles(self, event: Event, search_query: str, songs: List[Dict]):
-        """
-        构建并发送一个符合企业微信图文消息格式的JSON payload。
-        
-        :param event: 触发事件的对象，用于获取chatid等信息
-        :param search_query: 用户的原始搜索词
-        :param songs: 从API获取的歌曲信息列表
-        """
-        event_data = event.event_data
-        # 假设 chatid 可以从事件数据中获取
-        chatid = event_data.get("chatid") or event_data.get("userid")
-        
-        # 1. 处理没有搜索结果的情况
-        if not songs:
-            # 对于没有结果的情况，我们还是发送一条简单的文本消息
-            # 注意：这里的 post_message 需要能处理简单的文本发送
-            self.post_message(
-                userid=chatid,  # 假设单聊时 userid 尊是 chatid
-                title=f"【{search_query}】",
-                text="❌ 未找到相关歌曲，请尝试其他关键词。"
-            )
-            return
-
-        # 2. 构建 articles 列表 (核心部分)
-        articles = []
-        # 使用切片 [:8] 确保最多只处理8条歌曲
-        for song in songs[:8]:
-            song_id = song.get('id')
-            # 假设我们可以拼接出歌曲的网页链接
-            song_url = f"https://music.163.com/#/song?id={song_id}" if song_id else "https://music.163.com/"
-            
-            article = {
-                "title": f"{song.get('name', '未知歌曲')} - {song.get('artists', '') or song.get('ar_name', '')}",
-                "description": f"专辑: {song.get('album', '未知专辑')}",
-                "url": song_url,
-                "picurl": song.get('picUrl', '') or song.get('album_picUrl', '')
-            }
-            articles.append(article)
-
-        # 3. 组装成最终的、符合企业微信API要求的JSON payload
-        wechat_payload = {
-            "chatid": chatid,
-            "msgtype": "news",
-            "news": {
-                "articles": articles
-            }
-        }
-        
-        # 4. 调用一个能够发送原始JSON的底层方法
-        # 假设 self.post_message 足够智能，可以识别这种原始payload
-        # 或者我们有一个专门的函数 self.post_raw_json(...)
-        self.post_message(raw_json=wechat_payload)
-        
-        logger.info(f"已构建并发送企业微信图文消息至 chatid: {chatid}")
-
     def _handle_music_download(self, event: Event):
         """
         处理音乐下载命令
@@ -836,14 +781,6 @@ class NeteaseMusic(*BaseClasses):
                 error_msg = search_result.get('message', '未知错误')
                 logger.warning(f"用户 {userid} 搜索失败: {error_msg}")
                 response = f"❌ 搜索失败: {error_msg}"
-                # 发送简单的错误文本消息
-                self.post_message(
-                    channel=channel,
-                    source=source,
-                    title="🎵 音乐搜索失败",
-                    text=response,
-                    userid=userid
-                )
             else:
                 songs = search_result.get("data", [])
                 if not songs:
@@ -862,16 +799,10 @@ class NeteaseMusic(*BaseClasses):
                     self._update_session(userid, session_data)
                     logger.debug(f"用户 {userid} 搜索结果已保存到会话，时间戳: {session_data['data']['timestamp']}")
                     
-                    # 【核心改造】直接调用新的企业微信图文消息函数
-                    # 我们需要传递原始的 event 对象
-                    self._send_song_list_as_wechat_articles(
-                        event=event,
-                        search_query=command_args,
-                        songs=songs
-                    )
-                    return  # 直接返回，不再执行原来的文本格式化逻辑
+                    # 显示第一页结果
+                    response = self._format_song_list_page(userid, songs, 0)
         
-            # 发送结果（仅在没有找到歌曲时执行）
+            # 发送结果
             self.post_message(
                 channel=channel,
                 source=source,
@@ -1141,7 +1072,7 @@ class NeteaseMusic(*BaseClasses):
             logger.warning(f"用户 {userid} 输入的歌曲序号无效: {command_args}")
             response = "❌ 请输入有效的数字序号或翻页指令 (/n n 下一页, /n p 上一页)"
             self.post_message(
-                    channel=channel,
+                channel=channel,
                     source=source,
                     title="🎵 歌曲选择",
                     text=response,
