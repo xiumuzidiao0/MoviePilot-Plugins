@@ -710,70 +710,87 @@ class NeteaseMusic(*BaseClasses):
     @eventmanager.register(EventType.PluginAction)
     def command_action(self, event: Event):
         """
-        处理 /y 和 /n 命令。
-        /y 用于发起搜索。
-        /n 用于在需要选择音质时响应。
+        远程命令响应
         """
+        logger.info(f"收到PluginAction事件: {event}")
+        
         if not self._enabled:
+            logger.info("插件未启用")
             return
             
         event_data = event.event_data
-        action = event_data.get("action")
+        logger.info(f"事件数据: {event_data}")
         
+        # 获取动作类型
+        action = event_data.get("action") if event_data else None
+        
+        # 根据动作类型处理不同命令
         if action == "netease_music_download":
-            # 这是 /y 命令的入口
-            self._handle_music_search(event)
+            self._handle_music_download(event)
         elif action == "netease_music_select":
-            # 这是 /n 命令的入口，现在专门用于处理需要手动输入数字的场景（如选择音质）
-            self._handle_manual_selection(event)
+            self._handle_music_select(event)
         else:
             logger.info(f"未知的动作类型: {action}")
+            return
 
-    def _send_song_list_with_buttons(self, event: Event, search_query: str, songs: List[Dict]):
+    def _send_song_list_as_wechat_articles(self, event: Event, search_query: str, songs: List[Dict]):
         """
-        【新增】构建并发送带有交互按钮的歌曲列表消息。
+        构建并发送一个符合企业微信图文消息格式的JSON payload。
+        
+        :param event: 触发事件的对象，用于获取chatid等信息
+        :param search_query: 用户的原始搜索词
+        :param songs: 从API获取的歌曲信息列表
         """
         event_data = event.event_data
-        channel = event_data.get("channel")
-        source = event_data.get("source")
-        userid = event_data.get("userid") or event_data.get("user")
-
+        # 假设 chatid 可以从事件数据中获取
+        chatid = event_data.get("chatid") or event_data.get("userid")
+        
+        # 1. 处理没有搜索结果的情况
         if not songs:
+            # 对于没有结果的情况，我们还是发送一条简单的文本消息
+            # 注意：这里的 post_message 需要能处理简单的文本发送
             self.post_message(
-                channel=channel, source=source, userid=userid,
+                userid=chatid,  # 假设单聊时 userid 尊是 chatid
                 title=f"【{search_query}】",
-                text="❌ 未找到相关歌曲。"
+                text="❌ 未找到相关歌曲，请尝试其他关键词。"
             )
             return
 
-        text_parts = [f"🔍 为“{search_query}”找到 {len(songs)} 首相关歌曲："]
-        buttons = []
-        
-        for i, song in enumerate(songs, 1):
-            name = song.get('name', '未知歌曲')
-            artists = song.get('artists', '') or song.get('ar_name', '')
-            text_parts.append(f"{i}. {name} - {artists}")
-
-            # 为每首歌创建一个按钮
+        # 2. 构建 articles 列表 (核心部分)
+        articles = []
+        # 使用切片 [:8] 确保最多只处理8条歌曲
+        for song in songs[:8]:
             song_id = song.get('id')
-            if song_id:
-                button_text = f"下载 {name}"
-                callback_data = f"[PLUGIN]{self.__class__.__name__}|select_song_{song_id}"
-                # 每行一个下载按钮，更清晰
-                buttons.append([{"text": button_text, "callback_data": callback_data}])
+            # 假设我们可以拼接出歌曲的网页链接
+            song_url = f"https://music.163.com/#/song?id={song_id}" if song_id else "https://music.163.com/"
             
-        self.post_message(
-            channel=channel,
-            source=source,
-            userid=userid,
-            title="搜索结果",
-            text="请选择歌曲：",
-            buttons=buttons
-        )
+            article = {
+                "title": f"{song.get('name', '未知歌曲')} - {song.get('artists', '') or song.get('ar_name', '')}",
+                "description": f"专辑: {song.get('album', '未知专辑')}",
+                "url": song_url,
+                "picurl": song.get('picUrl', '') or song.get('album_picUrl', '')
+            }
+            articles.append(article)
 
-    def _handle_music_search(self, event: Event):
+        # 3. 组装成最终的、符合企业微信API要求的JSON payload
+        wechat_payload = {
+            "chatid": chatid,
+            "msgtype": "news",
+            "news": {
+                "articles": articles
+            }
+        }
+        
+        # 4. 调用一个能够发送原始JSON的底层方法
+        # 假设 self.post_message 足够智能，可以识别这种原始payload
+        # 或者我们有一个专门的函数 self.post_raw_json(...)
+        self.post_message(raw_json=wechat_payload)
+        
+        logger.info(f"已构建并发送企业微信图文消息至 chatid: {chatid}")
+
+    def _handle_music_download(self, event: Event):
         """
-        处理 /y 命令发起的音乐搜索。
+        处理音乐下载命令
         """
         event_data = event.event_data
         # 从事件数据中获取用户ID，可能的字段名包括userid和user
@@ -845,8 +862,13 @@ class NeteaseMusic(*BaseClasses):
                     self._update_session(userid, session_data)
                     logger.debug(f"用户 {userid} 搜索结果已保存到会话，时间戳: {session_data['data']['timestamp']}")
                     
-                    # 【核心改造】调用新的按钮消息发送函数
-                    self._send_song_list_with_buttons(event, command_args, songs)
+                    # 【核心改造】直接调用新的企业微信图文消息函数
+                    # 我们需要传递原始的 event 对象
+                    self._send_song_list_as_wechat_articles(
+                        event=event,
+                        search_query=command_args,
+                        songs=songs
+                    )
                     return  # 直接返回，不再执行原来的文本格式化逻辑
         
             # 发送结果（仅在没有找到歌曲时执行）
@@ -871,83 +893,318 @@ class NeteaseMusic(*BaseClasses):
             except Exception as e2:
                 logger.error(f"发送错误消息失败: {e2}", exc_info=True)
 
-    def _send_quality_selection_message(self, event: Event, song_id_str: str):
+    def _format_song_list_page(self, userid: str, songs: List[Dict], page: int) -> str:
         """
-        【新增】发送音质选择消息，可以使用按钮或文本列表。
-        这里我们继续使用文本列表 + /n 数字的交互，因为音质选项固定，无需动态生成。
+        格式化歌曲列表页面
+        
+        :param userid: 用户ID
+        :param songs: 歌曲列表
+        :param page: 页码（从0开始）
+        :return: 格式化后的页面内容
+        """
+        PAGE_SIZE = 8  # 每页显示8首歌曲
+        total_songs = len(songs)
+        total_pages = (total_songs + PAGE_SIZE - 1) // PAGE_SIZE  # 计算总页数
+        
+        # 计算当前页的起始和结束索引
+        start_idx = page * PAGE_SIZE
+        end_idx = min(start_idx + PAGE_SIZE, total_songs)
+        
+        # 构造歌曲列表回复
+        response = f"🔍 搜索到 {total_songs} 首歌曲 (第 {page + 1}/{total_pages} 页):\n"
+        
+        # 显示当前页的歌曲
+        for i in range(start_idx, end_idx):
+            song = songs[i]
+            name = song.get('name', '')
+            artists = song.get('artists', '') or song.get('ar_name', '')
+            pic_url = song.get('picUrl', '') or song.get('album_picUrl', '')
+            
+            response += f"{i + 1}. {name} - {artists}\n"
+            if pic_url:
+                response += f"   🖼️ 封面: {pic_url}\n"
+        
+        # 添加翻页提示
+        if total_pages > 1:
+            response += "\n"
+            if page > 0:
+                response += "输入 /n p 查看上一页\n"
+            if page < total_pages - 1:
+                response += "输入 /n n 查看下一页\n"
+        
+        response += "输入 /n 数字 选择歌曲下载，例如：/n 1"
+        
+        return response
+
+    def _handle_music_select(self, event: Event):
+        """
+        处理音乐选择命令
         """
         event_data = event.event_data
+        # 从事件数据中获取用户ID，可能的字段名包括userid和user
         userid = event_data.get("userid") or event_data.get("user")
+        channel = event_data.get("channel")
+        source = event_data.get("source")
         
-        # 【重要】更新会话，告知系统当前正在等待用户为哪个 song_id 选择音质
-        session_data = {
-            "state": "waiting_for_quality_choice",
-            "data": {"song_id": song_id_str}
-        }
-        self._update_session(userid, session_data)
-        
-        response = self._format_quality_list()
-        
-        # 编辑原消息或发送新消息
-        self.post_message(
-            channel=event_data.get("channel"),
-            source=event_data.get("source"),
-            userid=userid,
-            title="🎵 请选择音质",
-            text=response,
-            original_message_id=event_data.get("original_message_id"),
-            original_chat_id=event_data.get("original_chat_id")
-        )
-
-    def _handle_manual_selection(self, event: Event):
-        """
-        【重构】处理 /n 命令，现在主要用于音质选择。
-        """
-        event_data = event.event_data
-        userid = event_data.get("userid") or event_data.get("user")
-        session = self._get_session(userid)
-
-        if not session or session.get("state") != "waiting_for_quality_choice":
-            # 如果不是在等待音质选择，则忽略此命令或给出提示
+        if not userid:
+            logger.info("用户ID为空")
             return
             
-        song_id_str = session["data"].get("song_id")
-        if not song_id_str:
+        # 获取命令参数（数字或翻页指令）
+        command_args = event_data.get("arg_str", "").strip()
+        if not command_args:
+            # 如果没有参数，提示用户输入
+            logger.info(f"用户 {userid} 触发音乐选择命令，但未提供参数")
+            try:
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 歌曲选择",
+                    text="请输入要选择的歌曲序号，例如：/n 1",
+                    userid=userid
+                )
+                logger.info(f"已向用户 {userid} 发送提示消息")
+            except Exception as e:
+                logger.error(f"发送提示消息失败: {e}", exc_info=True)
             return
+        
+        logger.info(f"用户 {userid} 选择歌曲: {command_args}")
+        
+        # 检查用户是否有有效的搜索会话
+        session = self._get_session(userid)
+        if not session:
+            logger.info(f"用户 {userid} 没有有效的搜索会话")
+            try:
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 歌曲选择",
+                    text="请先使用 /y 命令搜索歌曲，然后使用 /n 数字 来选择歌曲下载",
+                    userid=userid
+                )
+                logger.info(f"已向用户 {userid} 发送提示消息")
+            except Exception as e:
+                logger.error(f"发送提示消息失败: {e}", exc_info=True)
+            return
+        
+        # 检查会话是否在有效时间内（5分钟内）
+        data = session.get("data", {})
+        timestamp = data.get("timestamp", 0)
+        current_time = time.time()
+        if current_time - timestamp > self.SESSION_TIMEOUT:
+            logger.info(f"用户 {userid} 的搜索会话已超时")
+            try:
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 歌曲选择",
+                    text="搜索结果已过期，请重新使用 /y 命令搜索歌曲",
+                    userid=userid
+                )
+                logger.info(f"已向用户 {userid} 发送提示消息")
+                # 清理会话
+                self._sessions.pop(userid, None)
+            except Exception as e:
+                logger.error(f"发送提示消息失败: {e}", exc_info=True)
+            return
+        
+        # 检查会话状态
+        state = session.get("state")
+        songs = data.get("songs", [])
+        current_page = data.get("current_page", 0)
+        PAGE_SIZE = 8
+        
+        # 根据会话状态处理不同情况
+        if state == "waiting_for_quality_choice":
+            # 处理音质选择
+            selected_song = data.get("selected_song")
+            if selected_song:
+                return self._handle_quality_selection(event, selected_song)
+        elif state == "waiting_for_song_choice":
+            # 处理歌曲选择或翻页
+            pass
+        else:
+            logger.info(f"用户 {userid} 会话状态无效: {state}")
+            try:
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 歌曲选择",
+                    text="会话状态异常，请重新使用 /y 命令搜索歌曲",
+                    userid=userid
+                )
+                logger.info(f"已向用户 {userid} 发送提示消息")
+                # 清理会话
+                self._sessions.pop(userid, None)
+            except Exception as e:
+                logger.error(f"发送提示消息失败: {e}", exc_info=True)
+            return
+        
+        # 处理翻页指令
+        if command_args.lower() == 'n':  # 下一页
+            total_pages = (len(songs) + PAGE_SIZE - 1) // PAGE_SIZE
+            if current_page < total_pages - 1:
+                # 更新会话中的页码
+                data["current_page"] = current_page + 1
+                self._update_session(userid, {"state": "waiting_for_song_choice", "data": data})
+                
+                # 显示下一页
+                response = self._format_song_list_page(userid, songs, current_page + 1)
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 音乐搜索结果",
+                    text=response,
+                    userid=userid
+                )
+                logger.info(f"已向用户 {userid} 发送下一页搜索结果")
+            else:
+                response = "❌ 已经是最后一页了"
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 歌曲选择",
+                    text=response,
+                    userid=userid
+                )
+            return
+        elif command_args.lower() == 'p':  # 上一页
+            if current_page > 0:
+                # 更新会话中的页码
+                data["current_page"] = current_page - 1
+                self._update_session(userid, {"state": "waiting_for_song_choice", "data": data})
+                
+                # 显示上一页
+                response = self._format_song_list_page(userid, songs, current_page - 1)
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 音乐搜索结果",
+                    text=response,
+                    userid=userid
+                )
+                logger.info(f"已向用户 {userid} 发送上一页搜索结果")
+            else:
+                response = "❌ 已经是第一页了"
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 歌曲选择",
+                    text=response,
+                    userid=userid
+                )
+            return
+        
+        # 处理数字选择
+        try:
+            song_index = int(command_args) - 1
+            logger.debug(f"用户 {userid} 选择歌曲序号: {command_args} (索引: {song_index})")
+            
+            if 0 <= song_index < len(songs):
+                selected_song = songs[song_index]
+                song_name = selected_song.get('name', '')
+                song_artists = selected_song.get('artists', '') or selected_song.get('ar_name', '')
+                
+                logger.info(f"用户 {userid} 选择歌曲: {song_name} - {song_artists}")
+                
+                # 检查是否需要询问音质
+                default_quality = self._default_quality or self.DEFAULT_QUALITY
+                if default_quality == "ask":
+                    # 保存选中的歌曲到会话并询问音质
+                    data["selected_song"] = selected_song
+                    self._update_session(userid, {"state": "waiting_for_quality_choice", "data": data})
+                    
+                    # 显示音质选择列表
+                    response = self._format_quality_list()
+                    self.post_message(
+                        channel=channel,
+                        source=source,
+                        title="🎵 选择音质",
+                        text=response,
+                        userid=userid
+                    )
+                    logger.info(f"已向用户 {userid} 发送音质选择列表")
+                else:
+                    # 使用默认音质下载
+                    self._download_song_with_quality(event, selected_song, default_quality)
+            else:
+                logger.warning(f"用户 {userid} 选择的歌曲序号超出范围: {song_index} (有效范围: 0-{len(songs)-1})")
+                response = f"❌ 序号超出范围，请输入 1-{len(songs)} 之间的数字"
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 歌曲选择",
+                    text=response,
+                    userid=userid
+                )
+        except ValueError:
+            logger.warning(f"用户 {userid} 输入的歌曲序号无效: {command_args}")
+            response = "❌ 请输入有效的数字序号或翻页指令 (/n n 下一页, /n p 上一页)"
+            self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 歌曲选择",
+                    text=response,
+                    userid=userid
+            )
 
+    def _handle_quality_selection(self, event: Event, selected_song: Dict):
+        """
+        处理音质选择
+        
+        :param event: 事件对象
+        :param selected_song: 选中的歌曲
+        """
+        event_data = event.event_data
+        userid = event_data.get("userid") or event_data.get("user")
+        channel = event_data.get("channel")
+        source = event_data.get("source")
         command_args = event_data.get("arg_str", "").strip()
         
-        quality_options = [ "standard", "exhigh", "lossless", "hires", "sky", "jyeffect", "jymaster" ]
         try:
             quality_index = int(command_args) - 1
+            quality_options = [
+                {"code": "standard", "name": "标准音质", "desc": "128kbps MP3"},
+                {"code": "exhigh", "name": "极高音质", "desc": "320kbps MP3"},
+                {"code": "lossless", "name": "无损音质", "desc": "FLAC"},
+                {"code": "hires", "name": "Hi-Res音质", "desc": "24bit/96kHz"},
+                {"code": "sky", "name": "沉浸环绕声", "desc": "空间音频"},
+                {"code": "jyeffect", "name": "高清环绕声", "desc": "环绕声效果"},
+                {"code": "jymaster", "name": "超清母带", "desc": "母带音质"}
+            ]
+            
             if 0 <= quality_index < len(quality_options):
-                quality_code = quality_options[quality_index]
-                self._download_song_by_id(event, song_id_str, quality_code)
+                selected_quality = quality_options[quality_index]
+                quality_code = selected_quality["code"]
+                quality_name = selected_quality["name"]
+                
+                logger.info(f"用户 {userid} 选择音质: {quality_name}")
+                
+                # 重置会话状态
+                self._update_session(userid, {"state": "idle"})
+                
+                # 下载歌曲
+                self._download_song_with_quality(event, selected_song, quality_code)
             else:
-                # 序号无效
-                pass 
+                logger.warning(f"用户 {userid} 选择的音质序号超出范围: {quality_index}")
+                response = f"❌ 序号超出范围，请输入 1-{len(quality_options)} 之间的数字"
+                self.post_message(
+                    channel=channel,
+                    source=source,
+                    title="🎵 音质选择",
+                    text=response,
+                    userid=userid
+                )
         except ValueError:
-            # 输入不是数字
-            pass
-
-    def _handle_song_selection_by_id(self, event: Event, song_id_str: str):
-        """
-        【新增】通过按钮回调接收到 song_id 后的处理器。
-        """
-        default_quality = self._default_quality or self.DEFAULT_QUALITY
-        if default_quality == "ask":
-            # 如果需要询问音质，显示音质选择
-            self._send_quality_selection_message(event, song_id_str)
-        else:
-            # 否则，直接使用默认音质下载
-            self._download_song_by_id(event, song_id_str, default_quality)
-
-    # 【废弃】以下方法不再需要，可以安全删除
-    # - _format_song_list_page
-    # - _handle_music_select (大部分逻辑已移入 _handle_manual_selection 和 message_action)
-    # - _handle_quality_selection
-    # - _download_song_with_quality (逻辑已合并到 _download_song_by_id)
-    # - _send_song_list_as_wechat_articles
+            logger.warning(f"用户 {userid} 输入的音质序号无效: {command_args}")
+            response = "❌ 请输入有效的数字序号选择音质"
+            self.post_message(
+                channel=channel,
+                source=source,
+                title="🎵 音质选择",
+                text=response,
+                userid=userid
+            )
 
     def _format_quality_list(self) -> str:
         """
@@ -972,98 +1229,122 @@ class NeteaseMusic(*BaseClasses):
         response += "\n请输入 /n 数字 选择音质，例如：/n 2"
         return response
 
-    def _download_song_by_id(self, event: Event, song_id_str: str, quality_code: str):
+    def _download_song_with_quality(self, event: Event, selected_song: Dict, quality_code: str):
         """
-        【重构】最终的下载执行函数，不再依赖会话中的 song 对象。
+        使用指定音质下载歌曲
+        
+        :param event: 事件对象
+        :param selected_song: 选中的歌曲
+        :param quality_code: 音质代码
         """
         event_data = event.event_data
         userid = event_data.get("userid") or event_data.get("user")
+        channel = event_data.get("channel")
+        source = event_data.get("source")
         
-        # 清理会话，交互结束
-        self._sessions.pop(userid, None)
-
-        # 【优化】因为没有 song 对象，我们需要先获取一下歌曲信息来显示给用户
-        # 这是一个可选的API调用，可以提升用户体验
-        # 使用搜索功能获取歌曲信息（通过ID搜索）
-        song_search_result = self._api_tester.search_music(song_id_str, limit=1)
-        song_name = "未知歌曲"
-        artist = "未知艺术家"
+        # 获取音质信息
+        quality_options = {
+            "standard": {"name": "标准音质", "desc": "128kbps MP3"},
+            "exhigh": {"name": "极高音质", "desc": "320kbps MP3"},
+            "lossless": {"name": "无损音质", "desc": "FLAC"},
+            "hires": {"name": "Hi-Res音质", "desc": "24bit/96kHz"},
+            "sky": {"name": "沉浸环绕声", "desc": "空间音频"},
+            "jyeffect": {"name": "高清环绕声", "desc": "环绕声效果"},
+            "jymaster": {"name": "超清母带", "desc": "母带音质"}
+        }
         
-        if song_search_result.get("success"):
-            songs = song_search_result.get("data", [])
-            if songs:
-                song_info = songs[0]
-                song_name = song_info.get('name', f"歌曲ID {song_id_str}")
-                artist = song_info.get('artists', '') or song_info.get('ar_name', '未知艺术家')
+        quality_info = quality_options.get(quality_code, quality_options[self.DEFAULT_QUALITY])
+        quality_name = quality_info["name"]
         
-        # 发送“正在下载”的提示，并编辑原消息
-        self.post_message(
-            channel=event_data.get("channel"),
-            source=event_data.get("source"),
-            userid=userid,
-            title="🎵 音乐下载",
-            text=f"📥 开始下载: {song_name} - {artist}\n请稍候...",
-            original_message_id=event_data.get("original_message_id"),
-            original_chat_id=event_data.get("original_chat_id")
-        )
+        # 获取歌曲信息
+        song_name = selected_song.get('name', '')
+        song_id = str(selected_song.get('id', ''))
+        artist = selected_song.get('artists', '') or selected_song.get('ar_name', '')
+        
+        logger.info(f"用户 {userid} 准备下载歌曲: {song_name} - {artist} ({quality_name})")
+        
+        # 重置会话状态
+        self._update_session(userid, {"state": "idle"})
+        logger.debug(f"用户 {userid} 会话状态重置为: idle")
+        
+        # 执行下载
+        response = f"📥 开始下载: {song_name} - {artist} ({quality_name})\n请稍候..."
+        logger.debug(f"开始下载歌曲 {song_id}，音质: {quality_code}")
         
         try:
-            download_result = self._api_tester.download_music_for_link(song_id_str, quality_code)
-            
-            if download_result.get("success"):
-                data = download_result.get("data", {})
-                file_path = data.get("file_path", "")
-                response_text = f"✅ 下载完成!\n歌曲: {song_name}\n艺术家: {artist}"
-                if self._openlist_url and file_path:
-                    filename = file_path.split("/")[-1]
-                    response_text += f"\n🔗 下载链接: {self._openlist_url.rstrip('/')}/{filename}"
-            else:
-                error_msg = download_result.get('message', '未知错误')
-                response_text = f"❌ 下载失败: {error_msg}"
+            download_result = self._api_tester.download_music_for_link(song_id, quality_code)
+            logger.debug(f"下载完成，结果: success={download_result.get('success')}")
         except Exception as e:
             logger.error(f"下载歌曲时发生异常: {e}", exc_info=True)
-            response_text = "❌ 下载失败: 网络异常，请稍后重试"
-
-        # 再次编辑消息，显示最终结果
-        self.post_message(
-            channel=event_data.get("channel"),
-            source=event_data.get("source"),
-            userid=userid,
-            title="🎵 音乐下载完成",
-            text=response_text,
-            original_message_id=event_data.get("original_message_id"),
-            original_chat_id=event_data.get("original_chat_id")
-        )
-
-    @eventmanager.register(EventType.MessageAction)
-    def message_action(self, event: Event):
-        """
-        【新增】处理消息按钮的回调事件，这是现代交互的核心。
-        """
-        if not self._enabled:
+            self.post_message(
+                channel=channel,
+                source=source,
+                title="🎵 音乐下载",
+                text="❌ 下载失败: 网络异常，请稍后重试",
+                userid=userid
+            )
             return
-            
-        event_data = event.event_data
-        if not event_data:
-            return
-            
-        # 检查是否为本插件的回调
-        plugin_id = event_data.get("plugin_id")
-        if plugin_id != self.__class__.__name__:
-            return
-            
-        # 获取回调数据
-        callback_text = event_data.get("text", "")
         
-        # 解析回调内容，并分发到不同的处理器
-        if callback_text.startswith("select_song_"):
-            song_id_str = callback_text.replace("select_song_", "")
-            self._handle_song_selection_by_id(event, song_id_str)
-        elif callback_text.startswith("select_quality_"):
-            parts = callback_text.replace("select_quality_", "").split("_")
-            if len(parts) == 2:
-                song_id_str, quality_code = parts
-                self._download_song_by_id(event, song_id_str, quality_code)
+        if download_result.get("success"):
+            response += "\n✅ 下载完成!"
+            logger.info(f"用户 {userid} 下载完成: {song_name} - {artist} ({quality_name})")
+            
+            # 如果配置了openlist地址，则添加链接信息
+            if self._openlist_url:
+                # 从返回结果中获取完整的文件名（包含后缀）
+                data = download_result.get("data", {})
+                file_path = data.get("file_path", "")
+                
+                # 提取文件名部分
+                if file_path:
+                    # 从路径中提取文件名，例如 "/app/downloads/傅如乔 - 微微.flac" -> "傅如乔 - 微微.flac"
+                    filename = file_path.split("/")[-1]
+                    openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
+                    response += f"\n🔗 下载链接: {openlist_link}"
+                else:
+                    # 如果没有文件路径信息，使用原来的处理方式
+                    filename = f"{song_name} - {artist}".replace("/", "_").replace("\\", "_").replace(":", "_")
+                    openlist_link = f"{self._openlist_url.rstrip('/')}/{filename}"
+                    response += f"\n🔗 下载链接: {openlist_link}"
+        else:
+            error_msg = download_result.get('message', '未知错误')
+            response += f"\n❌ 下载失败: {error_msg}"
+            logger.warning(f"用户 {userid} 下载失败: {error_msg}")
+        
+        # 发送结果
+        self.post_message(
+            channel=channel,
+            source=source,
+            title="🎵 音乐下载完成",
+            text=response,
+            userid=userid
+        )
+        logger.info(f"已向用户 {userid} 发送下载结果")
+
+    @eventmanager.register(EventType.UserMessage)
+    def handle_user_message(self, event: Event):
+        """
+        监听用户消息事件
+        """
+        logger.debug(f"收到用户消息事件: {event}")
+        
+        if not self._enabled:
+            logger.debug("插件未启用，忽略消息")
+            return
+            
+        # 获取消息内容
+        text = event.event_data.get("text")
+        userid = event.event_data.get("userid") or event.event_data.get("user")
+        channel = event.event_data.get("channel")
+        
+        if not text or not userid:
+            logger.warning("消息缺少必要信息: text或userid为空")
+            return
+            
+        logger.info(f"收到用户消息: {text} (用户: {userid})")
+        
+        # 现在使用专门的命令处理，不再处理普通用户消息
+        logger.debug(f"用户 {userid} 发送普通消息，交由系统处理")
 
     def test_connection(self, url: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -1171,11 +1452,7 @@ class NeteaseMusic(*BaseClasses):
                                                             },
                                                             {
                                                                 'component': 'li',
-                                                                'text': '从搜索结果中点击下载按钮进行下载（推荐方式）'
-                                                            },
-                                                            {
-                                                                'component': 'li',
-                                                                'text': '或使用"/n 数字"选择歌曲序号进行下载'
+                                                                'text': '从搜索结果中选择歌曲序号进行下载'
                                                             },
                                                             {
                                                                 'component': 'li',
