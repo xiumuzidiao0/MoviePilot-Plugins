@@ -11,7 +11,8 @@ try:
     from app.core.event import eventmanager, Event
     from app.log import logger
     from app.plugins import _PluginBase
-    from app.schemas.types import EventType, MessageChannel
+    from app.schemas import Notification, MediaInfo
+    from app.schemas.types import EventType, MessageChannel, MediaType
     MODULES_AVAILABLE = True
 except ImportError as e:
     print(f"警告: 缺少必要的MoviePilot模块: {e}")
@@ -787,22 +788,11 @@ class NeteaseMusic(*BaseClasses):
                     logger.info(f"用户 {userid} 搜索未找到结果: {command_args}")
                     response = "❌ 未找到相关歌曲，请尝试其他关键词。"
                 else:
-                    # 保存搜索结果到会话，包含分页信息
-                    session_data = {
-                        "state": "waiting_for_song_choice",
-                        "data": {
-                            "songs": songs,
-                            "timestamp": time.time(),  # 添加时间戳
-                            "current_page": 0  # 添加当前页码
-                        }
-                    }
-                    self._update_session(userid, session_data)
-                    logger.debug(f"用户 {userid} 搜索结果已保存到会话，时间戳: {session_data['data']['timestamp']}")
-                    
-                    # 显示第一页结果
-                    response = self._format_song_list_page(userid, songs, 0)
+                    # 使用新的媒体卡片方式发送歌曲列表
+                    self._send_song_list_as_media_card(event, command_args, songs)
+                    return
         
-            # 发送结果
+            # 如果没有使用媒体卡片方式，则发送文本消息
             self.post_message(
                 channel=channel,
                 source=source,
@@ -979,15 +969,10 @@ class NeteaseMusic(*BaseClasses):
                 data["current_page"] = current_page + 1
                 self._update_session(userid, {"state": "waiting_for_song_choice", "data": data})
                 
-                # 显示下一页
-                response = self._format_song_list_page(userid, songs, current_page + 1)
-                self.post_message(
-                    channel=channel,
-                    source=source,
-                    title="🎵 音乐搜索结果",
-                    text=response,
-                    userid=userid
-                )
+                # 使用新的媒体卡片方式发送歌曲列表（下一页）
+                # 获取原始搜索关键词
+                original_query = data.get("query", command_args)
+                self._send_song_list_page_as_media_card(event, original_query, songs, current_page + 1)
                 logger.info(f"已向用户 {userid} 发送下一页搜索结果")
             else:
                 response = "❌ 已经是最后一页了"
@@ -1005,15 +990,10 @@ class NeteaseMusic(*BaseClasses):
                 data["current_page"] = current_page - 1
                 self._update_session(userid, {"state": "waiting_for_song_choice", "data": data})
                 
-                # 显示上一页
-                response = self._format_song_list_page(userid, songs, current_page - 1)
-                self.post_message(
-                    channel=channel,
-                    source=source,
-                    title="🎵 音乐搜索结果",
-                    text=response,
-                    userid=userid
-                )
+                # 使用新的媒体卡片方式发送歌曲列表（上一页）
+                # 获取原始搜索关键词
+                original_query = data.get("query", command_args)
+                self._send_song_list_page_as_media_card(event, original_query, songs, current_page - 1)
                 logger.info(f"已向用户 {userid} 发送上一页搜索结果")
             else:
                 response = "❌ 已经是第一页了"
@@ -1589,3 +1569,146 @@ class NeteaseMusic(*BaseClasses):
                 }
             }
         ]
+
+    def _send_song_list_as_media_card(self, event: Event, search_query: str, songs: List[Dict]):
+        """
+        【新】使用框架标准方法 post_medias_message 发送歌曲列表卡片。
+        """
+        event_data = event.event_data
+        userid = event_data.get("userid") or event_data.get("user")
+
+        if not songs:
+            # 对于没有结果的情况，依然发送简单的文本消息
+            self.post_message(
+                userid=userid,
+                title=f"【{search_query}】",
+                text="❌ 未找到相关歌曲。"
+            )
+            return
+            
+        # 1. 构建顶部的引导消息 (Notification 对象)
+        # 注意：现在交互是通过回复数字进行的，所以提示文本要改回来
+        main_title = (f"【{search_query}】共找到 {len(songs)} 首相关歌曲，"
+                      "请回复 /n 数字 选择下载（如 /n 1）")
+                      
+        notification_obj = Notification(
+            title=main_title,
+            userid=userid,
+            # 传递 channel 和 source 很重要，确保消息能回到正确的对话
+            channel=event_data.get("channel"),
+            source=event_data.get("source")
+        )
+
+        # 2. 构建 medias 列表 (List[MediaInfo])
+        medias_list = []
+        for song in songs:
+            # 【重要】将歌曲字典映射到 MediaInfo 对象
+            media_item = MediaInfo(
+                # source 和 type 可以自定义，但最好有值
+                source='netease_music',
+                type=MediaType.MUSIC, # 假设我们有一个 MUSIC 类型
+                # 核心字段映射
+                title=f"{song.get('name', '未知歌曲')}",
+                overview=f"歌手: {song.get('artists', '') or song.get('ar_name', '')}\n专辑: {song.get('album', '未知专辑')}",
+                poster_path=song.get('picUrl', '') or song.get('album_picUrl', ''),
+                # 把 song_id 存起来，虽然 MediaInfo 没有直接的字段，但可以利用 names 或其他字段
+                # 或者，我们依然依赖会话来根据序号查找ID
+                # 为了保持简单，我们继续依赖会话
+            )
+            medias_list.append(media_item)
+
+        # 3. 保存会话，以便用户通过 /n 数字 回复时，我们能找到对应的歌曲
+        session_data = {
+            "state": "waiting_for_song_choice",
+            "data": {
+                "songs": songs,  # 存下完整的歌曲列表
+                "query": search_query  # 保存搜索关键词
+            }
+        }
+        self._update_session(userid, session_data)
+
+        # 4. 调用框架提供的标准方法发送媒体列表
+        self.post_medias_message(
+            message=notification_obj,
+            medias=medias_list
+        )
+        logger.info(f"已向用户 {userid} 发送媒体卡片式搜索结果。")
+
+    def _send_song_list_page_as_media_card(self, event: Event, search_query: str, songs: List[Dict], page: int):
+        """
+        使用框架标准方法 post_medias_message 发送歌曲列表卡片（分页版本）。
+        """
+        event_data = event.event_data
+        userid = event_data.get("userid") or event_data.get("user")
+        channel = event_data.get("channel")
+        source = event_data.get("source")
+
+        PAGE_SIZE = 8  # 每页显示8首歌曲
+        total_songs = len(songs)
+        total_pages = (total_songs + PAGE_SIZE - 1) // PAGE_SIZE  # 计算总页数
+
+        # 计算当前页的起始和结束索引
+        start_idx = page * PAGE_SIZE
+        end_idx = min(start_idx + PAGE_SIZE, total_songs)
+
+        # 获取当前页的歌曲
+        page_songs = songs[start_idx:end_idx]
+
+        if not page_songs:
+            # 对于没有结果的情况，依然发送简单的文本消息
+            self.post_message(
+                userid=userid,
+                title=f"【{search_query}】",
+                text="❌ 未找到相关歌曲。"
+            )
+            return
+
+        # 1. 构建顶部的引导消息 (Notification 对象)
+        main_title = (f"【{search_query}】共找到 {total_songs} 首相关歌曲 "
+                      f"(第 {page + 1}/{total_pages} 页)，"
+                      "请回复 /n 数字 选择下载（如 /n 1）")
+
+        notification_obj = Notification(
+            title=main_title,
+            userid=userid,
+            # 传递 channel 和 source 很重要，确保消息能回到正确的对话
+            channel=channel,
+            source=source
+        )
+
+        # 2. 构建 medias 列表 (List[MediaInfo])
+        medias_list = []
+        for song in page_songs:
+            # 【重要】将歌曲字典映射到 MediaInfo 对象
+            media_item = MediaInfo(
+                # source 和 type 可以自定义，但最好有值
+                source='netease_music',
+                type=MediaType.MUSIC,  # 假设我们有一个 MUSIC 类型
+                # 核心字段映射
+                title=f"{song.get('name', '未知歌曲')}",
+                overview=f"歌手: {song.get('artists', '') or song.get('ar_name', '')}\n专辑: {song.get('album', '未知专辑')}",
+                poster_path=song.get('picUrl', '') or song.get('album_picUrl', ''),
+                # 把 song_id 存起来，虽然 MediaInfo 没有直接的字段，但可以利用 names 或其他字段
+                # 或者，我们依然依赖会话来根据序号查找ID
+                # 为了保持简单，我们继续依赖会话
+            )
+            medias_list.append(media_item)
+
+        # 3. 保存会话，以便用户通过 /n 数字 回复时，我们能找到对应的歌曲
+        session_data = {
+            "state": "waiting_for_song_choice",
+            "data": {
+                "songs": songs,  # 存下完整的歌曲列表
+                "timestamp": time.time(),
+                "current_page": page,  # 保存当前页码
+                "query": search_query  # 保存搜索关键词
+            }
+        }
+        self._update_session(userid, session_data)
+
+        # 4. 调用框架提供的标准方法发送媒体列表
+        self.post_medias_message(
+            message=notification_obj,
+            medias=medias_list
+        )
+        logger.info(f"已向用户 {userid} 发送媒体卡片式搜索结果（第 {page + 1} 页）。")
