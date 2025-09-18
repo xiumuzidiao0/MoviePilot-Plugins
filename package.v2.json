@@ -2,7 +2,7 @@
   "NeteaseMusic": {
     "name": "网易云音乐下载",
     "description": "通过消息交互下载网易云音乐歌曲",
-    "version": "1.28",
+    "version": "1.29",
     "icon": "https://raw.githubusercontent.com/xiumuzidiao0/MoviePilot-Plugins/main/icons/163music_A.png",
     "author": "xiumuzidiao0",
     "level": 1,
