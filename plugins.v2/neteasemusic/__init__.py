@@ -11,7 +11,7 @@ try:
     from app.core.event import eventmanager, Event
     from app.log import logger
     from app.plugins import _PluginBase
-    from app.schemas import Notification, MediaInfo
+    from app.schemas import Notification, MediaInfo, MediaSeason
     from app.schemas.types import EventType, MessageChannel, MediaType
     MODULES_AVAILABLE = True
 except ImportError as e:
@@ -172,6 +172,30 @@ class NeteaseMusic(*BaseClasses):
                 "auth": "bear",
                 "summary": "测试API连接",
                 "description": "测试配置的API地址是否可以正常连接"
+            },
+            {
+                "path": "/search",
+                "endpoint": self.search_music,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "搜索音乐",
+                "description": "根据关键词搜索网易云音乐"
+            },
+            {
+                "path": "/download",
+                "endpoint": self.download_music,
+                "methods": ["POST"],
+                "auth": "bear",
+                "summary": "下载音乐",
+                "description": "根据歌曲ID下载网易云音乐"
+            },
+            {
+                "path": "/qualities",
+                "endpoint": self.get_qualities,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "获取音质选项",
+                "description": "获取网易云音乐支持的音质选项"
             }
         ]
         
@@ -1303,20 +1327,131 @@ class NeteaseMusic(*BaseClasses):
                 "error": str(e)
             }
 
-    def get_page(self) -> List[dict]:
+    def search_music(self, keyword: str, limit: int = 8) -> Dict[str, Any]:
         """
-        获取插件详情页面配置
+        搜索音乐
+        
+        Args:
+            keyword: 搜索关键词
+            limit: 返回结果数量
+            
+        Returns:
+            搜索结果
+        """
+        if not self._enabled:
+            return {"success": False, "message": "插件未启用"}
+        
+        try:
+            # 使用配置的搜索限制或默认值
+            search_limit = limit or self._search_limit or self.DEFAULT_SEARCH_LIMIT
+            result = self._api_tester.search_music(keyword, limit=search_limit)
+            
+            # 如果搜索成功，将其转换为MediaSeason格式
+            if result.get("success"):
+                songs = result.get("data", [])
+                media_seasons = [
+                    MediaSeason(
+                        season_number=i + 1,
+                        poster_path=song.get('picUrl', '') or song.get('album_picUrl', ''),
+                        name=f"{song.get('name', '未知歌曲')} - {song.get('artists', '') or song.get('ar_name', '')}",
+                        air_date="",
+                        overview=f"专辑: {song.get('album', '未知专辑')}\n歌手: {song.get('artists', '') or song.get('ar_name', '')}",
+                        vote_average=8.0,
+                        episode_count=1
+                    )
+                    for i, song in enumerate(songs)
+                ]
+                
+                # 返回MediaSeason格式的数据
+                return {"success": True, "data": media_seasons}
+            
+            return result
+        except Exception as e:
+            logger.error(f"音乐搜索出错: {e}", exc_info=True)
+            return {"success": False, "message": f"搜索异常: {str(e)}"}
+    
+    def download_music(self, song_id: str, quality: Optional[str] = None) -> Dict[str, Any]:
+        """
+        下载音乐
+        
+        Args:
+            song_id: 歌曲ID
+            quality: 音质等级
+            
+        Returns:
+            下载结果
+        """
+        if not self._enabled:
+            return {"success": False, "message": "插件未启用"}
+        
+        try:
+            # 使用传入的音质参数，如果没有传入则使用配置的默认音质
+            download_quality = quality or self._default_quality or self.DEFAULT_QUALITY
+            result = self._api_tester.download_music_for_link(song_id, download_quality)
+            
+            # 如果下载成功，将其转换为MediaSeason格式
+            if result.get("success"):
+                data = result.get("data", {})
+                
+                # 创建MediaSeason对象，模拟影视格式
+                media_season = MediaSeason(
+                    season_number=1,
+                    poster_path=data.get("pic_url", ""),
+                    name=f"{data.get('name', '未知歌曲')} - {data.get('artist', '未知艺术家')}",
+                    air_date="",
+                    overview=f"音质: {data.get('quality_name', '未知音质')}\n文件大小: {data.get('file_size_formatted', '未知大小')}",
+                    vote_average=8.0,
+                    episode_count=1
+                )
+                
+                # 返回MediaSeason格式的数据
+                return {"success": True, "data": [media_season]}
+            
+            return result
+        except Exception as e:
+            logger.error(f"音乐下载出错: {e}", exc_info=True)
+            return {"success": False, "message": f"下载异常: {str(e)}"}
+    
+    def get_qualities(self) -> Dict[str, Any]:
+        """
+        获取音质选项
         
         Returns:
-            页面配置列表
+            音质选项列表
         """
-        logger.debug("生成插件详情页面配置")
-        return [
-            {
-                'component': 'VContainer',
-                'props': {
-                    'fluid': True
-                },
+        if not self._enabled:
+            return {"success": False, "message": "插件未启用"}
+        
+        try:
+            # 定义音质选项
+            quality_options = [
+                {"code": "standard", "name": "标准音质", "desc": "128kbps MP3"},
+                {"code": "exhigh", "name": "极高音质", "desc": "320kbps MP3"},
+                {"code": "lossless", "name": "无损音质", "desc": "FLAC"},
+                {"code": "hires", "name": "Hi-Res音质", "desc": "24bit/96kHz"},
+                {"code": "sky", "name": "沉浸环绕声", "desc": "空间音频"},
+                {"code": "jyeffect", "name": "高清环绕声", "desc": "环绕声效果"},
+                {"code": "jymaster", "name": "超清母带", "desc": "母带音质"}
+            ]
+            
+            # 将音质选项转换为MediaSeason格式
+            media_seasons = [
+                MediaSeason(
+                    season_number=i + 1,
+                    poster_path="",
+                    name=quality["name"],
+                    air_date="",
+                    overview=quality["desc"],
+                    vote_average=8.0,
+                    episode_count=1
+                )
+                for i, quality in enumerate(quality_options)
+            ]
+            
+            return {"success": True, "data": media_seasons}
+        except Exception as e:
+            logger.error(f"获取音质选项出错: {e}", exc_info=True)
+            return {"success": False, "message": f"获取音质选项异常: {str(e)}"}
                 'content': [
                     {
                         'component': 'VRow',
@@ -1576,6 +1711,8 @@ class NeteaseMusic(*BaseClasses):
         """
         event_data = event.event_data
         userid = event_data.get("userid") or event_data.get("user")
+        channel = event_data.get("channel")
+        source = event_data.get("source")
 
         if not songs:
             # 对于没有结果的情况，依然发送简单的文本消息
@@ -1587,7 +1724,6 @@ class NeteaseMusic(*BaseClasses):
             return
             
         # 1. 构建顶部的引导消息 (Notification 对象)
-        # 注意：现在交互是通过回复数字进行的，所以提示文本要改回来
         main_title = (f"【{search_query}】共找到 {len(songs)} 首相关歌曲，"
                       "请回复 /n 数字 选择下载（如 /n 1）")
                       
@@ -1595,25 +1731,61 @@ class NeteaseMusic(*BaseClasses):
             title=main_title,
             userid=userid,
             # 传递 channel 和 source 很重要，确保消息能回到正确的对话
-            channel=event_data.get("channel"),
-            source=event_data.get("source")
+            channel=channel,
+            source=source
         )
 
         # 2. 构建 medias 列表 (List[MediaInfo])
         medias_list = []
-        for song in songs:
-            # 【重要】将歌曲字典映射到 MediaInfo 对象
+        for i, song in enumerate(songs):
+            # 获取歌曲信息
+            name = song.get('name', '未知歌曲')
+            artists = song.get('artists', '') or song.get('ar_name', '')
+            album = song.get('album', '未知专辑')
+            pic_url = song.get('picUrl', '') or song.get('album_picUrl', '')
+            song_id = song.get('id', '')
+            year = '未知年份'
+            
+            # 尝试从歌曲信息中提取年份
+            if 'album' in song and isinstance(song['album'], dict):
+                publish_time = song['album'].get('publishTime', '')
+                if publish_time:
+                    try:
+                        # 假设publishTime是毫秒时间戳
+                        import datetime
+                        year = datetime.datetime.fromtimestamp(publish_time/1000).strftime('%Y')
+                    except:
+                        year = '未知年份'
+            
+            # 【重要】将歌曲字典映射到 MediaInfo 对象，使其更像影视格式
             media_item = MediaInfo(
                 # source 和 type 可以自定义，但最好有值
                 source='netease_music',
-                type=MediaType.MUSIC, # 假设我们有一个 MUSIC 类型
-                # 核心字段映射
-                title=f"{song.get('name', '未知歌曲')}",
-                overview=f"歌手: {song.get('artists', '') or song.get('ar_name', '')}\n专辑: {song.get('album', '未知专辑')}",
-                poster_path=song.get('picUrl', '') or song.get('album_picUrl', ''),
-                # 把 song_id 存起来，虽然 MediaInfo 没有直接的字段，但可以利用 names 或其他字段
-                # 或者，我们依然依赖会话来根据序号查找ID
-                # 为了保持简单，我们继续依赖会话
+                type=MediaType.MUSIC,  # 使用 MUSIC 类型
+                # 核心字段映射，使其更像影视格式
+                title=name,
+                original_title=f"{name} - {artists}",
+                year=year,
+                # 添加歌手和专辑信息到概述
+                overview=f"歌手: {artists}\n专辑: {album}\n序号: {i+1}",
+                poster_path=pic_url,
+                # 添加其他字段使其更像影视格式
+                backdrop_path=pic_url,  # 使用相同图片作为背景
+                vote_average=8.0,  # 默认评分
+                genre_ids=[104] if artists else [],  # 音乐类型ID
+                # 保留原始信息
+                names=[name, artists],
+                tmdb_info={
+                    'id': song_id,
+                    'title': name,
+                    'original_title': f"{name} - {artists}",
+                    'poster_path': pic_url,
+                    'backdrop_path': pic_url,
+                    'release_date': year,
+                    'vote_average': 8.0,
+                    'genre_ids': [104],
+                    'media_type': MediaType.MUSIC
+                }
             )
             medias_list.append(media_item)
 
@@ -1678,19 +1850,58 @@ class NeteaseMusic(*BaseClasses):
 
         # 2. 构建 medias 列表 (List[MediaInfo])
         medias_list = []
-        for song in page_songs:
-            # 【重要】将歌曲字典映射到 MediaInfo 对象
+        for i, song in enumerate(page_songs):
+            # 获取歌曲信息
+            name = song.get('name', '未知歌曲')
+            artists = song.get('artists', '') or song.get('ar_name', '')
+            album = song.get('album', '未知专辑')
+            pic_url = song.get('picUrl', '') or song.get('album_picUrl', '')
+            song_id = song.get('id', '')
+            year = '未知年份'
+            
+            # 计算实际序号（在整个列表中的位置）
+            actual_index = start_idx + i
+            
+            # 尝试从歌曲信息中提取年份
+            if 'album' in song and isinstance(song['album'], dict):
+                publish_time = song['album'].get('publishTime', '')
+                if publish_time:
+                    try:
+                        # 假设publishTime是毫秒时间戳
+                        import datetime
+                        year = datetime.datetime.fromtimestamp(publish_time/1000).strftime('%Y')
+                    except:
+                        year = '未知年份'
+            
+            # 【重要】将歌曲字典映射到 MediaInfo 对象，使其更像影视格式
             media_item = MediaInfo(
                 # source 和 type 可以自定义，但最好有值
                 source='netease_music',
-                type=MediaType.MUSIC,  # 假设我们有一个 MUSIC 类型
-                # 核心字段映射
-                title=f"{song.get('name', '未知歌曲')}",
-                overview=f"歌手: {song.get('artists', '') or song.get('ar_name', '')}\n专辑: {song.get('album', '未知专辑')}",
-                poster_path=song.get('picUrl', '') or song.get('album_picUrl', ''),
-                # 把 song_id 存起来，虽然 MediaInfo 没有直接的字段，但可以利用 names 或其他字段
-                # 或者，我们依然依赖会话来根据序号查找ID
-                # 为了保持简单，我们继续依赖会话
+                type=MediaType.MUSIC,  # 使用 MUSIC 类型
+                # 核心字段映射，使其更像影视格式
+                title=name,
+                original_title=f"{name} - {artists}",
+                year=year,
+                # 添加歌手和专辑信息到概述
+                overview=f"歌手: {artists}\n专辑: {album}\n序号: {actual_index+1}",
+                poster_path=pic_url,
+                # 添加其他字段使其更像影视格式
+                backdrop_path=pic_url,  # 使用相同图片作为背景
+                vote_average=8.0,  # 默认评分
+                genre_ids=[104] if artists else [],  # 音乐类型ID
+                # 保留原始信息
+                names=[name, artists],
+                tmdb_info={
+                    'id': song_id,
+                    'title': name,
+                    'original_title': f"{name} - {artists}",
+                    'poster_path': pic_url,
+                    'backdrop_path': pic_url,
+                    'release_date': year,
+                    'vote_average': 8.0,
+                    'genre_ids': [104],
+                    'media_type': MediaType.MUSIC
+                }
             )
             medias_list.append(media_item)
 
